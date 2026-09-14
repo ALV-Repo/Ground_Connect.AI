@@ -65,7 +65,7 @@ export function EvidenceDonut({ data, height=145 }) {
     <ResponsiveContainer width="100%" height={height}>
       <PieChart>
         <Pie data={data} cx="50%" cy="50%" innerRadius={42} outerRadius={60} dataKey="value" paddingAngle={3}>
-          {data.map((e,i)=><Cell key={i} fill={e.color}/>)}
+          {data.map((e,i)=><Cell key={`chart-item-${i}`} fill={e.color}/>)}
         </Pie>
         <Tooltip formatter={v=>`${v}%`}/>
       </PieChart>

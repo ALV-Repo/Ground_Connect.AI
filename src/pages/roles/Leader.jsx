@@ -1,5 +1,6 @@
 import { ServiceDebtIndex, GeographicView, MessageAdvanced } from '../Supplements'
-import { useState } from 'react'
+import { useTheme } from '../../context/ThemeContext'
+import { useState, useCallback, useMemo } from 'react'
 import { ClipboardCheck, AlertTriangle, Users, Moon, Send, Eye, GitBranch, Building2,
   BarChart2, Link2, PlusCircle, Search, MessageSquare, Filter, Download, ChevronRight,
   Clock, Shield, Zap, CheckCircle2, XCircle, Calendar, TrendingUp, TrendingDown,
@@ -612,8 +613,8 @@ function TasksPage({ accent }) {
               <div className="text-xs text-slate-400">Give the task a clear name and explain what's expected</div>
             </div>
             <div>
-              <label className="label">Task name <span className="text-rose-500">*</span></label>
-              <input className="input" placeholder="e.g. Inspect water pipes in Zone A sector 3"
+              <label htmlFor="task-title" className="label">Task name <span className="text-rose-500">*</span></label>
+              <input id="task-title" aria-label="Task name" className="input" placeholder="e.g. Inspect water pipes in Zone A sector 3"
                 value={form.title} onChange={e=>set('title',e.target.value)}/>
               <div className="text-[10px] text-slate-400 mt-1">Be specific — the field worker needs to know exactly what to do</div>
             </div>
@@ -763,7 +764,10 @@ function TasksPage({ accent }) {
 function CitizenPage({ accent }) {
   const [filter, setFilter] = useState('All')
   const [sel, setSel] = useState(null)
-  const filtered = filter==='All' ? CITIZEN_ISSUES : CITIZEN_ISSUES.filter(c=>c.status===filter||c.priority===filter)
+  const filtered = useMemo(
+    () => filter==='All' ? CITIZEN_ISSUES : CITIZEN_ISSUES.filter(c=>c.status===filter||c.priority===filter),
+    [filter]
+  )
   return (
     <div className="space-y-4 page">
       <FilterPills options={['All','In Progress','Escalated','Assigned','Resolved-Confirmed','Disputed-Reopened']} active={filter} onChange={setFilter}/>
@@ -833,7 +837,7 @@ function AnalyticsPage({ accent }) {
         <Alert type="warning" className="mb-4">3 units flagged for silence. Metrics measure engagement absence only — never loyalty.</Alert>
         <div className="space-y-3">
           {[{node:'Zone C — Booth 31',issue:'No field reports for 7 days',severity:'high'},{node:'South District',issue:'Leader account inactive for 5 days',severity:'high'},{node:'Zone B — Booth 19',issue:'Below baseline issue intake',severity:'medium'}].map((d,i)=>(
-            <div key={i} className={`p-3.5 rounded-xl border ${d.severity==='high'?'border-rose-100 bg-rose-50 dark:bg-rose-900/10 dark:border-rose-900':'border-amber-100 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-900'}`}>
+            <div key={`leader-idx-${i}`} className={`p-3.5 rounded-xl border ${d.severity==='high'?'border-rose-100 bg-rose-50 dark:bg-rose-900/10 dark:border-rose-900':'border-amber-100 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-900'}`}>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{d.node}</span>
                 <StatusBadge status={d.severity==='high'?'High':'Medium'}/>
@@ -892,7 +896,8 @@ function DelegationPage({ accent }) {
   )
 }
 
-export default function Leader({ page, accent, user }) {
+export default function Leader({ page, user }) {
+  const { accent } = useTheme()
   const pages = {
     0:<Dashboard accent={accent}/>,
     1:<HierarchyPage accent={accent}/>,

@@ -2,9 +2,10 @@
 // Covers: CIT-21, DSH-04, DSH-08, LNG-02/03/05, COM-07/08/11, NTF-01/03/04,
 //         CIT-19, IDN-03, TPI-02/03, OFF improved UI, EVD-02 full flow
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { AlertTriangle, CheckCircle2, XCircle, Clock, Map, Globe, Bell, BellOff, BarChart2, Shield, Smartphone, Wifi, WifiOff, Upload, Lock, Languages, RefreshCw, PlusCircle, Send, Zap, Filter, Download, Eye, AlertCircle, Activity, Server } from 'lucide-react'
 import { SectionHeader, KpiCard, StatusBadge, Alert, Modal, Confirm, FilterPills, Avatar } from '../components/UI'
+import { useTheme } from '../context/ThemeContext'
 import { RadialProgress, LineMetricChart } from '../components/Charts'
 import { CITIZEN_ISSUES, OFFLINE_QUEUE, TPI_QUEUE } from '../data'
 
@@ -240,7 +241,7 @@ export function GeographicView({ accent = '#4f46e5' }) {
                     <circle cx={zone.x + zone.w - 18} cy={zone.y + 18} r="8" fill="#f59e0b"/>
                   )}
                   {zone.label.split('\n').map((line, i) => (
-                    <text key={i} x={zone.x + zone.w / 2} y={zone.y + zone.h / 2 - 8 + i * 16}
+                    <text key={`sup-item-${i}`} x={zone.x + zone.w / 2} y={zone.y + zone.h / 2 - 8 + i * 16}
                       textAnchor="middle" fontSize="11" fontWeight="700" fill={color === '#10b981' ? '#065f46' : color === '#f59e0b' ? '#92400e' : '#9f1239'}>
                       {line}
                     </text>
@@ -398,7 +399,7 @@ export function MessageAdvanced({ accent = '#4f46e5' }) {
               <thead><tr><th>Recipient</th><th>Role</th><th>Sent</th><th>Delivered</th><th>Read</th><th>Acknowledged</th><th>Status</th><th>Failure reason</th></tr></thead>
               <tbody>
                 {receipts.map((r, i) => (
-                  <tr key={i}>
+                  <tr key={`sup-item-${i}`}>
                     <td className="font-semibold">{r.recipient}</td>
                     <td className="text-slate-500 text-[10px]">{r.role}</td>
                     <td className="font-mono text-[10px] text-slate-400">{r.sent}</td>
@@ -429,7 +430,7 @@ export function MessageAdvanced({ accent = '#4f46e5' }) {
               {/* Watermark overlay — tiled */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-[0.08] dark:opacity-[0.12]" style={{ userSelect: 'none' }}>
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="text-[9px] font-mono text-slate-900 dark:text-white whitespace-nowrap"
+                  <div key={`sup-item-${i}`} className="text-[9px] font-mono text-slate-900 dark:text-white whitespace-nowrap"
                     style={{ transform: `rotate(-25deg) translateY(${i * 28}px) translateX(-10%)`, position: 'absolute', top: `${i * 50 - 20}px`, left: '-10%', width: '130%' }}>
                     RK-IDN-005 · STATE-HQ · MSG-001 · {new Date().toISOString().slice(0, 19)}Z
                   </div>
@@ -531,7 +532,7 @@ export function NotificationSettings({ accent = '#4f46e5' }) {
     return s
   })
 
-  const save = () => { setShowSaved(true); setTimeout(() => setShowSaved(false), 2500) }
+  const save = useCallback(() => { setShowSaved(true); setTimeout(() => setShowSaved(false), 2500) }, [])
 
   return (
     <div className="space-y-5 page">

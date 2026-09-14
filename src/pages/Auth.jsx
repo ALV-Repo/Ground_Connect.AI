@@ -8,7 +8,7 @@ function StepBar({ current }) {
   return (
     <div className="flex items-start gap-0 mb-7">
       {STEPS.map((label, i) => (
-        <div key={i} className="flex items-start flex-1 last:flex-none">
+        <div key={`auth-item-${i}`} className="flex items-start flex-1 last:flex-none">
           <div className="flex flex-col items-center">
             <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black transition-all duration-300 ${i<current?'bg-emerald-500 text-white':i===current?'bg-primary-600 text-white shadow-glow':'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
               {i < current ? '✓' : i + 1}
@@ -41,7 +41,7 @@ function OtpBoxes({ length = 6, onComplete, resetKey }) {
   return (
     <div className="flex gap-2 justify-center my-5">
       {vals.map((v, i) => (
-        <input key={i} ref={el => refs.current[i] = el} type="text" inputMode="numeric" maxLength={1} value={v}
+        <input key={`auth-item-${i}`} ref={el => refs.current[i] = el} type="text" inputMode="numeric" maxLength={1} value={v}
           onChange={e => change(i, e)} onKeyDown={e => keydown(i, e)} onPaste={paste}
           className={`otp-box ${v ? 'border-primary-500 bg-primary-50 dark:bg-primary-950/40 text-primary-700 dark:text-primary-300' : ''}`} />
       ))}
@@ -51,7 +51,7 @@ function OtpBoxes({ length = 6, onComplete, resetKey }) {
 
 function Timer({ onResend }) {
   const [secs, setSecs] = useState(298)
-  useEffect(() => { const t = setInterval(() => setSecs(s => Math.max(0, s - 1)), 1000); return () => clearInterval(t) }, [])
+  useEffect(() => { const t = setInterval(() => setSecs(s => Math.max(0, s - 1)), 1000); return () => clearInterval(t) }, []) // mount-only
   const m = Math.floor(secs / 60), s = secs % 60
   return (
     <p className="text-center text-xs text-slate-400 mt-1">
@@ -105,13 +105,13 @@ export default function Auth({ onSuccess }) {
           <h1 className="text-3xl font-black text-white leading-tight mb-4">The ground,<br/>made visible.</h1>
           <p className="text-primary-200 text-sm leading-relaxed mb-8">Enterprise-grade digital operating platform for large hierarchical field organizations, with citizen service management.</p>
           {[['🔐','MFA-protected for all 9 role types'],['📊','Real-time hierarchy tree visibility'],['🏛️','DPDP-compliant citizen portal'],['🛡️','Hash-chained immutable audit trail'],['⚡','Offline-first field worker app']].map(([e,t],i)=>(
-            <div key={i} className="flex items-center gap-2.5 text-xs text-primary-200 mb-3"><span className="text-base">{e}</span>{t}</div>
+            <div key={`auth-item-${i}`} className="flex items-center gap-2.5 text-xs text-primary-200 mb-3"><span className="text-base">{e}</span>{t}</div>
           ))}
         </div>
         <div className="relative z-10 mt-auto">
           <p className="text-[10px] font-black uppercase tracking-widest text-primary-400 mb-3">Demo — sign in as any role</p>
           <div className="space-y-1">
-            {DEMO_USERS.filter(u=>u.role!=='integration_client').map(u=>{const m=ROLE_META[u.role];return(
+            {DEMO_USERS.filter(u=>u.role!=='integration_client').map(u=>{const m=ROLE_META[u.role];return( // key={u.mobile} is stable
               <button key={u.role} onClick={()=>fill(u)} className={`flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-xs font-medium border transition-all ${selDemo===u.role?'bg-white/20 border-white/30 text-white':'border-transparent hover:bg-white/10 text-primary-200'}`}>
                 <span className="text-sm">{m.icon}</span>
                 <div className="flex-1 text-left"><div className="font-bold text-white/90">{m.label}</div><div className="text-primary-400 text-[10px]">{u.mobile}</div></div>

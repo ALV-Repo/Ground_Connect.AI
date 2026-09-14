@@ -1,8 +1,9 @@
 import AIModule from '../../components/AIModule'
 import { NotificationSettings, LanguageSettings, TPIApprovalFlow, OfflineSyncDashboard, EvidenceIntegrityView, ServiceDebtIndex } from '../Supplements'
-import { useState } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { ClipboardCheck, AlertTriangle, Users, Moon, Send, Eye, GitBranch, Building2, Shield, Lock, Key, Activity, Zap, FileText, Terminal, Globe, Server, CheckCircle2, XCircle, Camera, Mic, Upload, Search, Clock, PlusCircle, Download, RefreshCw, Smartphone, UserCheck, Settings, Filter, Map } from 'lucide-react'
 import { TASKS, MESSAGES, CITIZEN_ISSUES, AUTH_LOG, CONSENT_LOG, PROHIBITED_ALERTS, MEMBERS, TPI_QUEUE, API_LOG, OFFLINE_QUEUE, TENANTS, ORG_TREE, TASK_CHART, MSG_CHART, UPTIME_CHART, EVIDENCE_PIE } from '../../data'
+import { useTheme } from '../../context/ThemeContext'
 import { KpiCard, SectionHeader, FilterPills, StatusBadge, MsgBadge, Modal, Alert, Avatar, EmptyState, Confirm, DateRangePicker } from '../../components/UI'
 import { TaskBarChart, MsgAreaChart, EvidenceDonut, LineMetricChart, ChartLegend } from '../../components/Charts'
 import OrgTree from '../../components/OrgTree'
@@ -360,7 +361,7 @@ function CitizenTrack({ accent }) {
           <div>
             <div className="section-title mb-2">Activity</div>
             {tracked.updates.map((u,i)=>(
-              <div key={i} className="flex gap-3 mb-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0"/><div><div className="text-[10px] text-slate-400">{u.time}</div><div className="text-xs text-slate-600 dark:text-slate-400">{u.msg}</div></div></div>
+              <div key={`ar-item-${i}`} className="flex gap-3 mb-2"><div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 flex-shrink-0"/><div><div className="text-[10px] text-slate-400">{u.time}</div><div className="text-xs text-slate-600 dark:text-slate-400">{u.msg}</div></div></div>
             ))}
           </div>
           <Alert type="info">When a resolution is proposed, you will receive an OTP confirmation request in your language. You can confirm or dispute it — you are never auto-closed.</Alert>
@@ -549,7 +550,7 @@ function OARoles({ accent }) {
           ].map(r=>(
             <div key={r.role} className="flex items-center justify-between p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 transition-colors">
               <div><div className="text-xs font-bold text-slate-800 dark:text-slate-200">{r.role.replace(/_/g,' ')}</div><div className="text-[10px] text-slate-400 mt-0.5">{r.desc}</div></div>
-              <div className="flex items-center gap-3"><span className="badge badge-neutral">{r.level}</span><button className="btn-xs btn-outline"><Settings size={11}/></button></div>
+              <div className="flex items-center gap-3"><span className="badge badge-neutral">{r.level}</span><button aria-label="Action" className="btn-xs btn-outline"><Settings size=14 aria-hidden="true"/></button></div>
             </div>
           ))}
         </div>
@@ -716,7 +717,7 @@ function SecSessions({ accent }) {
     <div className="space-y-4 page">
       <div className="card overflow-hidden">
         <table className="tbl"><thead><tr><th>User</th><th>Role</th><th>Device</th><th>Session start</th><th>IP</th><th>MFA</th><th>Actions</th></tr></thead>
-        <tbody>{SESSIONS.map((s,i)=><tr key={i}><td><div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500"/><span className="font-semibold">{s.user}</span></div></td><td className="text-slate-500">{s.role}</td><td><StatusBadge status="active"/></td><td className="text-slate-400">{s.since}</td><td className="font-mono text-[10px] text-slate-400">{s.ip}</td><td><span className="badge badge-neutral">{s.mfa}</span></td><td><button onClick={()=>setConfirmRevoke(s)} className="btn-xs btn-danger">Revoke</button></td></tr>)}</tbody>
+        <tbody>{SESSIONS.map((s,i)=><tr key={`ar-item-${i}`}><td><div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-emerald-500"/><span className="font-semibold">{s.user}</span></div></td><td className="text-slate-500">{s.role}</td><td><StatusBadge status="active"/></td><td className="text-slate-400">{s.since}</td><td className="font-mono text-[10px] text-slate-400">{s.ip}</td><td><span className="badge badge-neutral">{s.mfa}</span></td><td><button onClick={()=>setConfirmRevoke(s)} className="btn-xs btn-danger">Revoke</button></td></tr>)}</tbody>
         </table>
       </div>
       <Confirm open={!!confirmRevoke} onClose={()=>setConfirmRevoke(null)} onConfirm={()=>setConfirmRevoke(null)} title="Revoke session" message={`Revoke session for ${confirmRevoke?.user}? Effect within 60 seconds including purge of offline data on next contact.`} danger/>
@@ -749,7 +750,7 @@ function SecTPI({ accent }) {
       <Alert type="warning">Two-person integrity requires a second distinct human approver (not the requester, not an account the requester created) with MFA within the configured window.</Alert>
       <div className="card overflow-hidden">
         <table className="tbl"><thead><tr><th>ID</th><th>Action</th><th>Requester</th><th>Threshold</th><th>Requested</th><th>Expires</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody>{TPI_QUEUE.map(t=><tr key={t.id}><td className="font-mono font-black text-rose-600 dark:text-rose-400">{t.id}</td><td className="font-semibold max-w-xs truncate">{t.action}</td><td>{t.requester}</td><td className="text-slate-500">{t.threshold}</td><td className="text-slate-400">{t.requested}</td><td className={t.expires==='Expired'?'text-rose-500 font-bold':'text-slate-400'}>{t.expires}</td><td><StatusBadge status={t.status}/></td><td>{t.status==='pending'&&<div className="flex gap-1"><button onClick={()=>setConfirmApprove(t)} className="btn-xs btn-success">Approve</button><button className="btn-xs btn-danger">Reject</button></div>}</td></tr>)}</tbody>
+        <tbody>{TPI_QUEUE.map(t=><tr key={t.id}><td className="font-mono font-black text-rose-600 dark:text-rose-400">{t.id}</td><td className="font-semibold max-w-xs truncate">{t.action}</td><td>{t.requester}</td><td className="text-slate-500">{t.threshold}</td><td className="text-slate-400">{t.requested}</td><td className={t.expires==='Expired'?'text-rose-500 font-bold':'text-slate-400'}>{t.expires}</td><td><StatusBadge status={t.status}/></td><td>{t.status==='pending'&&<div className="flex gap-1"><button onClick={()=>setConfirmApprove(t)} className="btn-xs btn-success">Approve</button><button aria-label="Reject request" className="btn-xs btn-danger">Reject</button></div>}</td></tr>)}</tbody>
         </table>
       </div>
       <Confirm open={!!confirmApprove} onClose={()=>setConfirmApprove(null)} onConfirm={()=>setConfirmApprove(null)} title="Approve TPI action" message={`Approve "${confirmApprove?.action}"? This will be logged permanently with your identity and MFA verification.`}/>
@@ -762,7 +763,7 @@ function SecDevices({ accent }) {
     <div className="space-y-4 page">
       <div className="card overflow-hidden">
         <table className="tbl"><thead><tr><th>User</th><th>Device</th><th>Registered</th><th>Last seen</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody>{[{user:'Ravi Kumar',device:'Samsung Galaxy S24',reg:'Aug 1',last:'Now',status:'trusted'},{user:'Sita Devi',device:'Realme C55',reg:'Aug 3',last:'10m ago',status:'trusted'},{user:'Arjun Patel',device:'Redmi Note 13',reg:'Aug 5',last:'1h ago',status:'trusted'},{user:'Unknown',device:'HUAWEI P40',reg:'Unregistered',last:'09:21',status:'denied'}].map((d,i)=><tr key={i}><td className="font-semibold">{d.user}</td><td className="text-slate-500">{d.device}</td><td className="text-slate-400">{d.reg}</td><td className="text-slate-400">{d.last}</td><td><StatusBadge status={d.status==='trusted'?'active':'denied'}/></td><td><button className="btn-xs btn-danger">Revoke</button></td></tr>)}</tbody>
+        <tbody>{[{user:'Ravi Kumar',device:'Samsung Galaxy S24',reg:'Aug 1',last:'Now',status:'trusted'},{user:'Sita Devi',device:'Realme C55',reg:'Aug 3',last:'10m ago',status:'trusted'},{user:'Arjun Patel',device:'Redmi Note 13',reg:'Aug 5',last:'1h ago',status:'trusted'},{user:'Unknown',device:'HUAWEI P40',reg:'Unregistered',last:'09:21',status:'denied'}].map((d,i)=><tr key={`ar-item-${i}`}><td className="font-semibold">{d.user}</td><td className="text-slate-500">{d.device}</td><td className="text-slate-400">{d.reg}</td><td className="text-slate-400">{d.last}</td><td><StatusBadge status={d.status==='trusted'?'active':'denied'}/></td><td><button className="btn-xs btn-danger">Revoke</button></td></tr>)}</tbody>
         </table>
       </div>
     </div>
@@ -776,7 +777,7 @@ function SecAnomalies({ accent }) {
         <SectionHeader title="Detected anomalies" icon={AlertTriangle} accent="#f43f5e"/>
         <div className="space-y-3">
           {[{type:'Login from unregistered device',user:'unknown@attempt.com',time:'09:21',severity:'high'},{type:'Repeated failed OTPs',user:'field.99@gc.in',time:'08:10',severity:'medium'},{type:'Access from unusual IP',user:'coord.zoneb@gc.in',time:'08:55',severity:'low'}].map((a,i)=>(
-            <div key={i} className={`p-3.5 rounded-xl border ${a.severity==='high'?'border-rose-100 bg-rose-50 dark:bg-rose-900/10 dark:border-rose-900':a.severity==='medium'?'border-amber-100 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-900':'border-slate-100 dark:border-slate-800'}`}>
+            <div key={`ar-item-${i}`} className={`p-3.5 rounded-xl border ${a.severity==='high'?'border-rose-100 bg-rose-50 dark:bg-rose-900/10 dark:border-rose-900':a.severity==='medium'?'border-amber-100 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-900':'border-slate-100 dark:border-slate-800'}`}>
               <div className="flex items-center justify-between mb-1"><span className="text-xs font-bold text-slate-800 dark:text-slate-200">{a.type}</span><StatusBadge status={a.severity==='high'?'High':'Medium'}/></div>
               <p className="text-xs text-slate-500">{a.user} · {a.time}</p>
             </div>
@@ -832,7 +833,7 @@ function POElevation({ accent }) {
       <div className="flex justify-end"><button onClick={()=>setShowReq(true)} className="btn-primary btn-sm"><PlusCircle size={13}/>Request elevation</button></div>
       <div className="card overflow-hidden">
         <table className="tbl"><thead><tr><th>Tenant</th><th>Reason</th><th>Duration</th><th>Approved by</th><th>Started</th><th>Status</th></tr></thead>
-        <tbody>{[{tenant:'State Org A',reason:'DB performance tuning',duration:'4h',approver:'Priya Menon',started:'09:21',status:'active'},{tenant:'NGO Fed B',reason:'Auth config update',duration:'2h',approver:'Ananya Roy',started:'Yesterday',status:'expired'}].map((e,i)=><tr key={i}><td className="font-bold">{e.tenant}</td><td>{e.reason}</td><td>{e.duration}</td><td>{e.approver}</td><td className="text-slate-400">{e.started}</td><td><StatusBadge status={e.status}/></td></tr>)}</tbody>
+        <tbody>{[{tenant:'State Org A',reason:'DB performance tuning',duration:'4h',approver:'Priya Menon',started:'09:21',status:'active'},{tenant:'NGO Fed B',reason:'Auth config update',duration:'2h',approver:'Ananya Roy',started:'Yesterday',status:'expired'}].map((e,i)=><tr key={`ar-item-${i}`}><td className="font-bold">{e.tenant}</td><td>{e.reason}</td><td>{e.duration}</td><td>{e.approver}</td><td className="text-slate-400">{e.started}</td><td><StatusBadge status={e.status}/></td></tr>)}</tbody>
         </table>
       </div>
       <Modal open={showReq} onClose={()=>setShowReq(false)} title="Request support elevation" size="md"
@@ -877,7 +878,7 @@ function POAudit({ accent }) {
       <Alert type="info">Platform-level audit log covers all elevation events, tenant config changes, and infrastructure operations.</Alert>
       <div className="card overflow-hidden">
         <table className="tbl"><thead><tr><th>Time</th><th>Operator</th><th>Action</th><th>Tenant</th><th>Result</th></tr></thead>
-        <tbody>{[{t:'09:21',op:'vikram.nair',a:'Support elevation granted',tn:'State Org A',r:'success'},{t:'08:00',op:'vikram.nair',a:'Tenant config viewed',tn:'NGO Fed B',r:'success'},{t:'Aug 9',op:'vikram.nair',a:'AI provider config change',tn:'State Org A',r:'success'}].map((l,i)=><tr key={i}><td className="font-mono text-slate-400">{l.t}</td><td className="font-medium">{l.op}</td><td>{l.a}</td><td>{l.tn}</td><td><StatusBadge status={l.r}/></td></tr>)}</tbody>
+        <tbody>{[{t:'09:21',op:'vikram.nair',a:'Support elevation granted',tn:'State Org A',r:'success'},{t:'08:00',op:'vikram.nair',a:'Tenant config viewed',tn:'NGO Fed B',r:'success'},{t:'Aug 9',op:'vikram.nair',a:'AI provider config change',tn:'State Org A',r:'success'}].map((l,i)=><tr key={`ar-item-${i}`}><td className="font-mono text-slate-400">{l.t}</td><td className="font-medium">{l.op}</td><td>{l.a}</td><td>{l.tn}</td><td><StatusBadge status={l.r}/></td></tr>)}</tbody>
         </table>
       </div>
     </div>
@@ -921,7 +922,7 @@ function ICCreds({ accent }) {
     <div className="space-y-4 page">
       <div className="card overflow-hidden">
         <table className="tbl"><thead><tr><th>Scope</th><th>Status</th><th>Expires</th><th>Actions</th></tr></thead>
-        <tbody>{[{scope:'hierarchy:read',status:'active',exp:'Dec 2026'},{scope:'tasks:read',status:'active',exp:'Dec 2026'},{scope:'issues:write',status:'active',exp:'Dec 2026'},{scope:'messages:write',status:'denied',exp:'—'},{scope:'audit:read',status:'denied',exp:'—'}].map((s,i)=><tr key={i}><td className="font-mono font-bold text-slate-700 dark:text-slate-300">{s.scope}</td><td><StatusBadge status={s.status==='active'?'active':'denied'}/></td><td className="text-slate-400">{s.exp}</td><td>{s.status==='active'&&<button className="btn-xs btn-danger">Revoke</button>}</td></tr>)}</tbody>
+        <tbody>{[{scope:'hierarchy:read',status:'active',exp:'Dec 2026'},{scope:'tasks:read',status:'active',exp:'Dec 2026'},{scope:'issues:write',status:'active',exp:'Dec 2026'},{scope:'messages:write',status:'denied',exp:'—'},{scope:'audit:read',status:'denied',exp:'—'}].map((s,i)=><tr key={`ar-item-${i}`}><td className="font-mono font-bold text-slate-700 dark:text-slate-300">{s.scope}</td><td><StatusBadge status={s.status==='active'?'active':'denied'}/></td><td className="text-slate-400">{s.exp}</td><td>{s.status==='active'&&<button className="btn-xs btn-danger">Revoke</button>}</td></tr>)}</tbody>
         </table>
       </div>
       <Alert type="warning">Credential rotation requires two-person approval. Rate limits are per-scope. No interactive session is permitted for Integration Client.</Alert>
@@ -936,7 +937,7 @@ function ICWebhooks({ accent }) {
       <div className="flex justify-end"><button onClick={()=>setShowAdd(true)} className="btn-primary btn-sm"><PlusCircle size={13}/>Add webhook</button></div>
       <div className="card p-5 space-y-3">
         {[{url:'https://api.partner.com/gc/webhook',events:['task.completed','issue.escalated'],status:'active'},{url:'https://api.partner.com/gc/alerts',events:['auth.denied','tpi.required'],status:'active'}].map((w,i)=>(
-          <div key={i} className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
+          <div key={`ar-item-${i}`} className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800">
             <div className="flex items-center justify-between mb-2"><span className="font-mono text-xs text-slate-700 dark:text-slate-300 truncate">{w.url}</span><StatusBadge status={w.status}/></div>
             <div className="flex gap-1.5 flex-wrap">{w.events.map(e=><span key={e} className="badge badge-primary text-[10px]">{e}</span>)}</div>
           </div>
@@ -979,7 +980,7 @@ function ICLogs({ accent }) {
     <div className="space-y-4 page">
       <div className="card overflow-hidden">
         <table className="tbl"><thead><tr><th>Time</th><th>Endpoint</th><th>Method</th><th>Status</th><th>Latency</th><th>Scope</th></tr></thead>
-        <tbody>{API_LOG.map((l,i)=><tr key={i}><td className="font-mono text-slate-400">{l.time}</td><td className="font-mono text-[11px] truncate max-w-48">{l.endpoint}</td><td><span className={`badge ${l.method==='GET'?'badge-primary':l.method==='POST'?'badge-success':'badge-neutral'}`}>{l.method}</span></td><td><StatusBadge status={l.status<300?'active':l.status===403?'denied':'warning'}/></td><td className="font-mono text-slate-400">{l.latency}</td><td className="font-mono text-[10px] text-slate-400 max-w-xs truncate">{l.scope}</td></tr>)}</tbody>
+        <tbody>{API_LOG.map((l,i)=><tr key={`ar-item-${i}`}><td className="font-mono text-slate-400">{l.time}</td><td className="font-mono text-[11px] truncate max-w-48">{l.endpoint}</td><td><span className={`badge ${l.method==='GET'?'badge-primary':l.method==='POST'?'badge-success':'badge-neutral'}`}>{l.method}</span></td><td><StatusBadge status={l.status<300?'active':l.status===403?'denied':'warning'}/></td><td className="font-mono text-slate-400">{l.latency}</td><td className="font-mono text-[10px] text-slate-400 max-w-xs truncate">{l.scope}</td></tr>)}</tbody>
         </table>
       </div>
     </div>
@@ -989,4 +990,23 @@ function ICLogs({ accent }) {
 export function IntegrationClient({ page, accent }) {
   const pages = { 0:<ICConsole accent={accent}/>, 1:<ICCreds accent={accent}/>, 2:<ICWebhooks accent={accent}/>, 3:<ICRateLimits accent={accent}/>, 4:<ICLogs accent={accent}/> }
   return pages[page] || <ICConsole accent={accent}/>
+}
+
+// ── Default export for React.lazy compatibility ─────────────────────────────
+const ROLE_MAP = {
+  coordinator: Coordinator,
+  field_worker: FieldWorker,
+  citizen: Citizen,
+  org_admin: OrgAdmin,
+  compliance: Compliance,
+  security_admin: SecurityAdmin,
+  platform_operator: PlatformOperator,
+  integration_client: IntegrationClient,
+}
+
+export default function AllRoles({ role, page, user }) {
+  const { accent } = useTheme()
+  const RoleComponent = ROLE_MAP[role]
+  if (!RoleComponent) return null
+  return <RoleComponent page={page} accent={accent} user={user}/>
 }

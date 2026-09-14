@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, forwardRef } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, forwardRef } from 'react'
+import { useDebounce } from '../hooks/useDebounce'
 import { X, CheckCircle2, XCircle, AlertTriangle, Info, Bell, Search, ChevronDown, ChevronRight, ChevronLeft } from 'lucide-react'
 import { ROLE_META } from '../data'
 
@@ -55,7 +56,7 @@ export function Modal({ open, onClose, title, children, size = 'md', footer }) {
       <div className={`relative w-full ${sizes[size]} card shadow-float animate-slide-up max-h-[90vh] flex flex-col`} onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
           <h2 className="text-sm font-bold text-slate-900 dark:text-white">{title}</h2>
-          <button onClick={onClose} className="btn-ghost btn-icon"><X size={15} /></button>
+          <button onClick={onClose} aria-label="Close dialog" className="btn-ghost btn-icon"><X size={15} aria-hidden="true"/></button>
         </div>
         <div className="p-6 overflow-y-auto flex-1">{children}</div>
         {footer && <div className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 flex-shrink-0 flex items-center justify-end gap-3">{footer}</div>}
@@ -66,13 +67,13 @@ export function Modal({ open, onClose, title, children, size = 'md', footer }) {
 
 // ── Toast ─────────────────────────────────────────────────────────────────
 export function Toast({ message, type = 'success', onClose }) {
-  useEffect(() => { const t = setTimeout(onClose, 4000); return () => clearTimeout(t) }, [])
+  useEffect(() => { const t = setTimeout(onClose, 4000); return () => clearTimeout(t) }, [onClose])
   const icons = { success:<CheckCircle2 size={16} className="text-emerald-500" />, error:<XCircle size={16} className="text-rose-500" />, warning:<AlertTriangle size={16} className="text-amber-500" />, info:<Info size={16} className="text-primary-500" /> }
   return (
     <div className="fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl bg-white dark:bg-slate-800 shadow-float border border-slate-100 dark:border-slate-700 animate-slide-up min-w-64 max-w-sm">
       <div className="flex-shrink-0">{icons[type]}</div>
       <span className="text-sm text-slate-700 dark:text-slate-300 flex-1">{message}</span>
-      <button onClick={onClose} className="text-slate-300 hover:text-slate-500 flex-shrink-0"><X size={14} /></button>
+      <button onClick={onClose} aria-label="Dismiss notification" className="text-slate-300 hover:text-slate-500 flex-shrink-0"><X size={14} aria-hidden="true"/></button>
     </div>
   )
 }
@@ -155,7 +156,8 @@ export function NotifBell({ accent }) {
     const fn = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
     document.addEventListener('mousedown', fn)
     return () => document.removeEventListener('mousedown', fn)
-  }, [])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // mount-only: ref is stable, fn recreated each render but effect re-runs would cause flicker
   const notes = [
     { text:'South District has an orphaned node', time:'2m ago', type:'danger' },
     { text:'Zone C flagged as dark unit', time:'15m ago', type:'warning' },
@@ -164,8 +166,8 @@ export function NotifBell({ accent }) {
   ]
   return (
     <div className="relative" ref={ref}>
-      <button onClick={() => setOpen(o => !o)} className="btn-ghost btn-icon relative">
-        <Bell size={16} />
+      <button onClick={() => setOpen(o => !o)} aria-label="Open notifications" className="btn-ghost btn-icon relative">
+        <Bell size={16} aria-hidden="true"/>
         <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-rose-500 text-white text-[9px] font-black rounded-full flex items-center justify-center">4</span>
       </button>
       {open && (
@@ -174,11 +176,11 @@ export function NotifBell({ accent }) {
             <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Notifications</span>
             <span className="badge badge-danger">4 new</span>
           </div>
-          {notes.map((n, i) => (
-            <div key={i} className="flex gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer border-b border-slate-50 dark:border-slate-800/50 last:border-0">
+          {notes.map((n) => (
+            <button key={n.text} className="flex gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer border-b border-slate-50 dark:border-slate-800/50 last:border-0 w-full text-left" aria-label={n.text}>
               <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${n.type==='danger'?'bg-rose-500':n.type==='warning'?'bg-amber-400':'bg-primary-500'}`} />
               <div><p className="text-xs text-slate-700 dark:text-slate-300">{n.text}</p><p className="text-[10px] text-slate-400 mt-0.5">{n.time}</p></div>
-            </div>
+            </button>
           ))}
           <div className="px-4 py-2 text-center"><button className="text-xs text-primary-600 font-semibold hover:underline">View all notifications</button></div>
         </div>
@@ -191,18 +193,20 @@ export function NotifBell({ accent }) {
 export function GlobalSearch() {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
+  const debouncedQ = useDebounce(q, 300)
   const ref = useRef(null)
   useEffect(() => {
     const fn = e => { if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); setOpen(true) } }
     document.addEventListener('keydown', fn)
     return () => document.removeEventListener('keydown', fn)
-  }, [])
-  const results = q.length > 1 ? [
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []) // mount-only: keyboard shortcut
+  const results = debouncedQ.length > 1 ? [
     { type:'Task', label:`TSK-001 · Booth infrastructure audit`, sub:'Zone A · In Progress' },
     { type:'Member', label:`Arjun Patel`, sub:'Field Worker · Zone A' },
     { type:'Issue', label:`CIT-001 · Broken street light`, sub:'Zone A · High priority' },
     { type:'Message', label:`Mobilisation order`, sub:'State HQ · Emergency' },
-  ].filter(r => r.label.toLowerCase().includes(q.toLowerCase())) : []
+  ].filter(r => r.label.toLowerCase().includes(debouncedQ.toLowerCase())) : []
   return (
     <>
       <button onClick={() => setOpen(true)} className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs text-slate-400 hover:border-primary-300 transition-colors">
@@ -215,19 +219,19 @@ export function GlobalSearch() {
             <div className="flex items-center gap-3 px-4 py-3 border-b border-slate-100 dark:border-slate-800">
               <Search size={16} className="text-slate-400 flex-shrink-0" />
               <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Search tasks, members, issues, messages…" className="flex-1 bg-transparent outline-none text-sm text-slate-900 dark:text-white placeholder:text-slate-400" />
-              <button onClick={() => { setOpen(false); setQ('') }}><X size={15} className="text-slate-400" /></button>
+              <button onClick={() => { setOpen(false); setQ('') }} aria-label="Close search"><X size={15} className="text-slate-400" aria-hidden="true"/></button>
             </div>
             {results.length > 0 ? (
               <div className="py-2 max-h-72 overflow-y-auto">
-                {results.map((r, i) => (
-                  <div key={i} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer">
+                {results.map((r) => (
+                  <button key={r.label} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer w-full text-left" aria-label={r.label}>
                     <span className="badge-primary badge text-[10px]">{r.type}</span>
                     <div><p className="text-sm font-medium text-slate-800 dark:text-slate-200">{r.label}</p><p className="text-xs text-slate-400">{r.sub}</p></div>
                   </div>
                 ))}
               </div>
-            ) : q.length > 1 ? (
-              <div className="px-4 py-8 text-center text-sm text-slate-400">No results for "{q}"</div>
+            ) : debouncedQ.length > 1 ? (
+              <div className="px-4 py-8 text-center text-sm text-slate-400">No results for &ldquo;{debouncedQ}&rdquo;</div>
             ) : (
               <div className="px-4 py-3 text-xs text-slate-400">Type to search across all permitted records</div>
             )}
@@ -332,8 +336,8 @@ export function ChartTip({ active, payload, label }) {
   return (
     <div className="bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-xl p-3 shadow-float text-xs">
       <p className="font-black text-slate-700 dark:text-slate-300 mb-2">{label}</p>
-      {payload.map((p,i)=>(
-        <div key={i} className="flex justify-between gap-5 text-slate-500">
+      {payload.map((p)=>(
+        <div key={p.name || p.dataKey} className="flex justify-between gap-5 text-slate-500">
           <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm" style={{background:p.color}}/>{p.name}</span>
           <span className="font-bold text-slate-700 dark:text-slate-200">{p.value?.toLocaleString()}</span>
         </div>

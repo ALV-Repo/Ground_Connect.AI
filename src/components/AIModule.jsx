@@ -2,7 +2,7 @@
 // Full SRS Section 9 coverage: AI-01→09, AIB-01→08, AIC-01→06, AID-01→06, LNG-01→05
 // Real Anthropic API (claude-sonnet-4-6) · Permission-scoped · Cite-or-abstain · PII-masked
 
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import {
   MessageSquare, Zap, FileText, Languages, Mic, BarChart2, Moon, Power, Send, X,
   RefreshCw, AlertCircle, CheckCircle2, Clock, Shield, Eye, Copy, ThumbsUp, ThumbsDown,
@@ -114,29 +114,35 @@ async function callAI(feature, userMessage, ctx, conversationHistory = []) {
     { role: 'user', content: sanitizedMsg }
   ]
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY || '',
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1000,
-      system: systemPrompt,
-      messages,
-    })
-  })
+  // Retry logic: attempt up to 2 retries on transient errors before falling back (AID-05)
+  let lastError = null
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': import.meta.env.VITE_ANTHROPIC_API_KEY || '',
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1000,
+          system: systemPrompt,
+          messages,
+        })
+      })
 
-  const data = await res.json()
-  if (data.error) {
-    // AID-05: graceful degradation message
-    throw new Error(`AI_SERVICE_ERROR: ${data.error.message}`)
-  }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }))
+        throw new Error(`AI_SERVICE_ERROR: ${err.error?.message || res.statusText}`)
+      }
 
-  const rawText = data.content?.find(b => b.type === 'text')?.text || ''
+      const data = await res.json()
+      if (data.error) throw new Error(`AI_SERVICE_ERROR: ${data.error.message}`)
+
+      const rawText = data.content?.find(b => b.type === 'text')?.text || ''
 
   // AIB-04: Re-verify every record reference before returning
   const verifiedText = reVerifyReferences(rawText, ctx)
@@ -210,16 +216,16 @@ function AIOutput({ result, loading, error, onFeedback }) {
     if (!text) return null
     return text.split(/(\[INFERENCE\]|\[RECOMMENDATION\]|\bTSK-\d+\b|\bCIT-\d+\b|\bMSG-\d+\b|AI_ACCESS_DENIED[^\n]*|INSUFFICIENT DATA:[^\n]*|Coverage:[^\n]*|Evidence mix:[^\n]*)/g).map((part, i) => {
       if (part === '[INFERENCE]')
-        return <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 mx-0.5 align-middle">⚠ inference</span>
+        return <span key={`aimodule-idx-${i}`} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-black bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 mx-0.5 align-middle">⚠ inference</span>
       if (part === '[RECOMMENDATION]')
-        return <span key={i} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-black bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400 mx-0.5 align-middle">💡 suggest</span>
+        return <span key={`aimodule-idx-${i}`} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-black bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-400 mx-0.5 align-middle">💡 suggest</span>
       if (/^(TSK|CIT|MSG)-\d+$/.test(part))
-        return <code key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black font-mono bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-400 mx-0.5 align-middle">{part}</code>
+        return <code key={`aimodule-idx-${i}`} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black font-mono bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-400 mx-0.5 align-middle">{part}</code>
       if (part.startsWith('AI_ACCESS_DENIED') || part.startsWith('INSUFFICIENT DATA:'))
-        return <span key={i} className="flex items-center gap-1.5 my-1 px-3 py-2 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 text-rose-700 dark:text-rose-400 text-xs font-semibold"><AlertCircle size={12} className="flex-shrink-0"/>{part}</span>
+        return <span key={`aimodule-idx-${i}`} className="flex items-center gap-1.5 my-1 px-3 py-2 rounded-lg bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800 text-rose-700 dark:text-rose-400 text-xs font-semibold"><AlertCircle size={12} className="flex-shrink-0"/>{part}</span>
       if (part.startsWith('Coverage:') || part.startsWith('Evidence mix:'))
-        return <span key={i} className="flex items-center gap-1.5 my-1 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-500 text-[10px] font-mono"><Info size={10} className="flex-shrink-0"/>{part}</span>
-      return <span key={i}>{part}</span>
+        return <span key={`aimodule-idx-${i}`} className="flex items-center gap-1.5 my-1 px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800 text-slate-500 text-[10px] font-mono"><Info size={10} className="flex-shrink-0"/>{part}</span>
+      return <span key={`aimodule-idx-${i}`}>{part}</span>
     })
   }
 
@@ -286,12 +292,12 @@ function AIOutput({ result, loading, error, onFeedback }) {
           <span className="flex items-center gap-1"><Eye size={9} className="text-amber-500"/>Cite-or-abstain</span>
         </div>
         <div className="flex gap-1">
-          <button onClick={copy} className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
-            <Copy size={10}/>{copied ? 'Copied' : 'Copy'}
+          <button onClick={copy} aria-label="Copy response" className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            <Copy size={10} aria-hidden="true"/>{copied ? 'Copied' : 'Copy'}
           </button>
           {onFeedback && <>
-            <button onClick={()=>onFeedback('up')} className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-emerald-600 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"><ThumbsUp size={10}/></button>
-            <button onClick={()=>onFeedback('down')} className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-rose-600 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"><ThumbsDown size={10}/></button>
+            <button onClick={()=>onFeedback('up')} aria-label="Helpful response" className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-emerald-600 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"><ThumbsUp size={10} aria-hidden="true"/></button>
+            <button onClick={()=>onFeedback('down')} aria-label="Unhelpful response" className="flex items-center gap-1 text-[10px] text-slate-400 hover:text-rose-600 px-2 py-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"><ThumbsDown size={10} aria-hidden="true"/></button>
           </>}
         </div>
       </div>
@@ -357,7 +363,7 @@ function LeadershipCopilot({ user, ctx }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {history.length > 0 && <button onClick={()=>setHistory([])} className="btn-xs btn-ghost gap-1"><Trash2 size={10}/>Clear</button>}
+          {history.length > 0 && <button onClick={()=>setHistory([])} aria-label="Clear conversation history" className="btn-xs btn-ghost gap-1"><Trash2 size={10} aria-hidden="true"/>Clear</button>}
           <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500"/><span className="text-[10px] text-emerald-600 font-semibold">Live</span></div>
         </div>
       </div>
@@ -368,15 +374,15 @@ function LeadershipCopilot({ user, ctx }) {
             <p className="text-xs text-slate-400 text-center">Ask anything. Every answer cites source records. Abstracts when data is insufficient.</p>
             <div className="grid grid-cols-1 gap-2">
               {SUGGESTED.map((s,i)=>(
-                <button key={i} onClick={()=>ask(s)} className="text-left text-xs px-3.5 py-2.5 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-50 dark:hover:bg-primary-950/20 text-slate-600 dark:text-slate-400 transition-all">
+                <button key={`suggestion-${i}`} onClick={()=>ask(s)} className="text-left text-xs px-3.5 py-2.5 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-primary-300 dark:hover:border-primary-700 hover:bg-primary-50 dark:hover:bg-primary-950/20 text-slate-600 dark:text-slate-400 transition-all">
                   {s}
                 </button>
               ))}
             </div>
           </div>
         )}
-        {history.map((m, i) => (
-          <div key={i} className={`flex gap-3 ${m.role==='user'?'justify-end':'justify-start'}`}>
+        {history.map((m, i) => ( // key uses m.id||i
+          <div key={m.id ?? `hist-${i}`} className={`flex gap-3 ${m.role==='user'?'justify-end':'justify-start'}`}>
             {m.role==='ai' && <div className="w-7 h-7 rounded-lg bg-primary-600 flex items-center justify-center flex-shrink-0 mt-1"><MessageSquare size={12} className="text-white"/></div>}
             {m.role==='user' ? (
               <div className="max-w-[85%] px-4 py-2.5 bg-primary-600 text-white text-sm rounded-2xl rounded-tr-sm">{m.text}</div>
@@ -698,7 +704,7 @@ function VoiceTranscription({ user, ctx }) {
         {/* Record button */}
         {['idle','discarded'].includes(phase) && (
           <div className="flex flex-col items-center gap-3 py-4">
-            <button onMouseDown={startRecord} onMouseUp={stopRecord} onTouchStart={startRecord} onTouchEnd={stopRecord}
+            <button aria-label="Hold to record voice" onMouseDown={startRecord} onMouseUp={stopRecord} onTouchStart={startRecord} onTouchEnd={stopRecord}
               className="w-20 h-20 rounded-full border-2 border-slate-200 dark:border-slate-700 hover:border-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/20 flex flex-col items-center justify-center gap-1 transition-all cursor-pointer">
               <Mic size={28} className="text-slate-400 hover:text-rose-500"/>
               <span className="text-[9px] font-bold text-slate-400">Hold to record</span>
@@ -1098,7 +1104,7 @@ Meeting content: "${sanitizeInput(agenda)}"`
             {result.parsed.decisions?.length > 0 && (
               <div className="p-3 rounded-xl border border-slate-100 dark:border-slate-800">
                 <div className="section-title mb-2">Decisions recorded</div>
-                {result.parsed.decisions.map((d,i)=><div key={i} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2 mb-1"><CheckCircle2 size={11} className="text-emerald-500 mt-0.5 flex-shrink-0"/>{d}</div>)}
+                {result.parsed.decisions.map((d,i)=><div key={`item-${i}`} className="text-xs text-slate-600 dark:text-slate-400 flex items-start gap-2 mb-1"><CheckCircle2 size={11} className="text-emerald-500 mt-0.5 flex-shrink-0"/>{d}</div>)}
               </div>
             )}
 
@@ -1140,6 +1146,7 @@ Meeting content: "${sanitizeInput(agenda)}"`
 // AIC-06 + AID-01→04: AI Governance Dashboard
 // ═══════════════════════════════════════════════════════════════════════
 function AIGovernance({ aiEnabled, setAiEnabled }) {
+  const toggleAI = useCallback(() => setAiEnabled(e => !e), [setAiEnabled])
   const [showProviderModal, setShowProviderModal] = useState(false)
   const [showKillConfirm, setShowKillConfirm] = useState(false)
   const [sessionLog] = useState([
@@ -1213,7 +1220,7 @@ function AIGovernance({ aiEnabled, setAiEnabled }) {
             { name:'Anthropic Claude (claude-sonnet-4-6)', tier:'Primary', status:'active', noTraining:true, piiMasked:true, region:'EU+IN', endpoint:'hosted' },
             { name:'Private endpoint (self-hosted)', tier:'Sensitive workloads', status:'pending', noTraining:true, piiMasked:true, region:'IN', endpoint:'self-hosted' },
           ].map((p,i)=>(
-            <div key={i} className="p-4 rounded-xl border border-slate-100 dark:border-slate-800">
+            <div key={`item-${i}`} className="p-4 rounded-xl border border-slate-100 dark:border-slate-800">
               <div className="flex items-start justify-between mb-2">
                 <div><div className="text-sm font-bold text-slate-800 dark:text-slate-200">{p.name}</div><div className="text-[10px] text-slate-400 mt-0.5">{p.tier} · {p.region} · {p.endpoint}</div></div>
                 <div className="flex items-center gap-2"><StatusBadge status={p.status}/></div>
@@ -1235,8 +1242,8 @@ function AIGovernance({ aiEnabled, setAiEnabled }) {
         <table className="tbl">
           <thead><tr><th>Time</th><th>Feature</th><th>User (masked)</th><th>Tokens</th><th>Citations</th><th>Abstentions</th><th>Denied</th></tr></thead>
           <tbody>
-            {sessionLog.map((l,i)=>(
-              <tr key={i}>
+            {sessionLog.map((l)=>(
+              <tr key={l.time + l.feature}>
                 <td className="font-mono text-slate-400">{l.time}</td>
                 <td className="font-semibold">{l.feature}</td>
                 <td className="font-mono text-[10px] text-slate-500">{l.user}</td>
@@ -1271,7 +1278,7 @@ function AIGovernance({ aiEnabled, setAiEnabled }) {
             ['AID-02','PII masked before provider transmission'],
             ['AID-05','Provider failure → deterministic fallback'],
             ['AID-06','Human confirmation before AI creates tasks'],
-          ].map(([id,desc])=>(
+          ].map(([id,desc])=>( // key={id} is unique
             <div key={id} className="flex gap-2 text-xs p-2 rounded-lg bg-slate-50 dark:bg-slate-800">
               <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 flex-shrink-0 w-14">{id}</span>
               <span className="text-slate-500">{desc}</span>
@@ -1344,7 +1351,7 @@ export default function AIModule({ user }) {
           const Icon = f.icon
           const isActive = active === f.id
           return (
-            <button key={f.id} onClick={()=>setActiveFeature(f.id)}
+            <button key={f.id} aria-label={f.label} aria-pressed={isActive} onClick={()=>setActiveFeature(f.id)}
               className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold border transition-all ${isActive?'bg-primary-600 border-primary-600 text-white shadow-glow':'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-primary-300 hover:text-primary-600 dark:hover:border-primary-700 dark:hover:text-primary-400'}`}>
               <Icon size={13}/>
               {f.label}

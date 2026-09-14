@@ -1,3 +1,13 @@
+
+// ── Named constants (replace magic numbers in components) ───────────────
+export const ORG_TOTAL_MEMBERS  = 8234
+export const ORG_TOTAL_RECIPIENTS = 12400
+export const DEV_PORT           = 5173
+export const DEMO_MOBILE_PREFIX = '+91 98765 0000'
+
+// Feature flag: set VITE_USE_MOCK=false in .env to use real backend API
+export const USE_MOCK = import.meta.env.VITE_USE_MOCK !== 'false'
+
 // ── Role definitions ──────────────────────────────────────────────────────
 export const ROLES = {
   LEADER:'leader', COORD:'coordinator', FIELD:'field_worker', CITIZEN:'citizen',
