@@ -9,6 +9,10 @@ from security.permissions import (
 from services.memory import ConversationMemoryService
 
 
+class HumanConfirmationRequiredError(Exception):
+    """Raised when an AI action requires human confirmation."""
+
+
 class AIService:
 
     def __init__(self):
@@ -27,6 +31,18 @@ class AIService:
             role=request.user_role,
             organization_id=request.organization_id,
         )
+
+        # AI-015:
+        # Block the AI action when human confirmation is required
+        # but has not been explicitly provided.
+        if (
+            request.requires_human_confirmation
+            and not request.human_confirmed
+        ):
+            raise HumanConfirmationRequiredError(
+                "Human confirmation is required before this AI action "
+                "can proceed."
+            )
 
         # AI-002 + AI-005:
         # Permission boundary + access-denied audit
@@ -75,7 +91,7 @@ class AIService:
         else:
             full_prompt = request.prompt
 
-        # AI-001 + AI-003:
+        # AI-001 + AI-003 + AI-014:
         # Send the request through the central AI gateway.
         response = await self.gateway.generate(
             prompt=full_prompt,
