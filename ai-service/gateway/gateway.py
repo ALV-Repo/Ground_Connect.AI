@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from core.config import settings
 from gateway.pii_masker import PIIMasker
 from gateway.providers import ProviderRegistry
+from security.prompt_security import PromptSecurityService
 
 
 @dataclass
@@ -11,6 +12,7 @@ class AIResponse:
     model: str
     content: str
     pii_masked: bool
+    prompt_injection_detected: bool
 
 
 class AIGateway:
@@ -22,6 +24,7 @@ class AIGateway:
         )
 
         self.pii_masker = PIIMasker()
+        self.prompt_security = PromptSecurityService()
 
     async def generate(
         self,
@@ -40,7 +43,25 @@ class AIGateway:
             )
         )
 
-        masked_prompt = self.pii_masker.mask(prompt)
+        sanitized_prompt, injection_detected = (
+            self.prompt_security.sanitize(prompt)
+        )
+
+        if injection_detected:
+            return AIResponse(
+                provider=provider_config.name,
+                model=model or provider_config.model,
+                content=(
+                    "Request blocked because "
+                    "prompt injection was detected."
+                ),
+                pii_masked=False,
+                prompt_injection_detected=True,
+            )
+
+        masked_prompt = self.pii_masker.mask(
+            sanitized_prompt
+        )
 
         selected_model = (
             model or provider_config.model
@@ -55,5 +76,6 @@ class AIGateway:
             provider=provider_config.name,
             model=selected_model,
             content=content,
-            pii_masked=masked_prompt != prompt,
+            pii_masked=masked_prompt != sanitized_prompt,
+            prompt_injection_detected=False,
         )
