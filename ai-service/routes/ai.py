@@ -13,6 +13,16 @@ from models.ai import (
     TranslationResponse,
     TranscriptionRequest,
     TranscriptionResponse,
+    IssueClassificationRequest,
+    IssueClassificationResponse,
+    IssueClassificationCorrectionRequest,
+    IssueClassificationCorrectionResponse,
+    ClusteringSuggestionRequest,
+    ClusteringSuggestionResponse,
+    GroundAnalyticsRequest,
+    GroundAnalyticsResponse,
+    DarkUnitRadarRequest,
+    DarkUnitRadarResponse,
 )
 
 from security.permissions import PermissionDeniedError
@@ -23,6 +33,10 @@ from services.leader_briefing import LeaderBriefingService
 from services.summarization import SummarizationService
 from services.translation import TranslationService
 from services.transcription import TranscriptionService
+from services.issue_classification import IssueClassificationService
+from services.clustering import ClusteringSuggestionService
+from services.ground_analytics import GroundAnalyticsService
+from services.dark_unit_radar import DarkUnitRadarService
 
 
 router = APIRouter(
@@ -37,6 +51,10 @@ leader_briefing_service = LeaderBriefingService()
 summarization_service = SummarizationService()
 translation_service = TranslationService()
 transcription_service = TranscriptionService()
+issue_classification_service = IssueClassificationService()
+clustering_service = ClusteringSuggestionService()
+ground_analytics_service = GroundAnalyticsService()
+dark_unit_radar_service = DarkUnitRadarService()
 
 
 # ============================================================
@@ -240,4 +258,170 @@ async def transcribe_audio(
         raise HTTPException(
             status_code=500,
             detail="AI transcription request failed",
+        ) from exc
+
+
+# ============================================================
+# AI-016
+# Citizen Issue Classification + Human Correction
+# ============================================================
+
+
+@router.post(
+    "/classify-issue",
+    response_model=IssueClassificationResponse,
+)
+async def classify_issue(
+    request: IssueClassificationRequest,
+):
+    try:
+        return await issue_classification_service.classify(request)
+
+    except PermissionDeniedError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="AI_ACCESS_DENIED",
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="AI issue classification request failed",
+        ) from exc
+
+
+@router.post(
+    "/classify-issue/correction",
+    response_model=IssueClassificationCorrectionResponse,
+)
+async def record_issue_classification_correction(
+    request: IssueClassificationCorrectionRequest,
+):
+    try:
+        return issue_classification_service.record_correction(request)
+
+    except PermissionDeniedError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="AI_ACCESS_DENIED",
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="AI issue classification correction failed",
+        ) from exc
+
+
+# ============================================================
+# AI-017
+# AI-Assisted Clustering Suggestions
+# ============================================================
+
+
+@router.post(
+    "/clustering/suggest",
+    response_model=ClusteringSuggestionResponse,
+)
+async def suggest_clusters(
+    request: ClusteringSuggestionRequest,
+):
+    try:
+        return await clustering_service.suggest_clusters(request)
+
+    except PermissionDeniedError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="AI_ACCESS_DENIED",
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="AI clustering suggestion request failed",
+        ) from exc
+
+
+# ============================================================
+# AI-018
+# Ground-Intelligence Analytics
+# ============================================================
+
+
+@router.post(
+    "/ground-analytics",
+    response_model=GroundAnalyticsResponse,
+)
+async def analyze_ground_intelligence(
+    request: GroundAnalyticsRequest,
+):
+    try:
+        return await ground_analytics_service.analyze(request)
+
+    except PermissionDeniedError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="AI_ACCESS_DENIED",
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="AI ground analytics request failed",
+        ) from exc
+# ============================================================
+# AI-019
+# Dark Unit Radar
+# ============================================================
+
+@router.post(
+    "/dark-unit-radar",
+    response_model=DarkUnitRadarResponse,
+)
+async def analyze_dark_units(
+    request: DarkUnitRadarRequest,
+):
+    try:
+        return await dark_unit_radar_service.analyze(request)
+
+    except PermissionDeniedError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="AI_ACCESS_DENIED",
+        ) from exc
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=str(exc),
+        ) from exc
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail="AI dark unit radar request failed",
         ) from exc

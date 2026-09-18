@@ -2,49 +2,22 @@ from pydantic import BaseModel, Field
 
 
 # ============================================================
-# AI-001 to AI-005
+# AI-001 to AI-005: Core AI Gateway
 # ============================================================
 
-
 class AIRequest(BaseModel):
-    prompt: str = Field(
-        ...,
-        min_length=1,
-        max_length=10000,
-    )
-
-    conversation_id: str = Field(
-        ...,
-        min_length=1,
-        max_length=100,
-    )
-
+    prompt: str = Field(..., min_length=1, max_length=10000)
+    conversation_id: str = Field(..., min_length=1, max_length=100)
     provider: str | None = None
     model: str | None = None
+    user_id: str = Field(..., min_length=1)
+    user_role: str = Field(..., min_length=1)
+    organization_id: str = Field(..., min_length=1)
+    resource_organization_id: str = Field(..., min_length=1)
 
-    # AI-015: Mandatory human confirmation
+    # AI-015: Mandatory human confirmation gate
     requires_human_confirmation: bool = False
     human_confirmed: bool = False
-
-    user_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    user_role: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    organization_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    resource_organization_id: str = Field(
-        ...,
-        min_length=1,
-    )
 
 
 class AIResponseModel(BaseModel):
@@ -56,43 +29,16 @@ class AIResponseModel(BaseModel):
 
 
 # ============================================================
-# AI-006 to AI-008
+# AI-006 to AI-008: Leadership Copilot
 # ============================================================
 
-
 class CopilotRequest(BaseModel):
-    question: str = Field(
-        ...,
-        min_length=1,
-        max_length=10000,
-    )
-
-    conversation_id: str = Field(
-        ...,
-        min_length=1,
-        max_length=100,
-    )
-
-    user_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    user_role: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    organization_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    resource_organization_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
+    question: str = Field(..., min_length=1, max_length=10000)
+    conversation_id: str = Field(..., min_length=1, max_length=100)
+    user_id: str = Field(..., min_length=1)
+    user_role: str = Field(..., min_length=1)
+    organization_id: str = Field(..., min_length=1)
+    resource_organization_id: str = Field(..., min_length=1)
     provider: str | None = None
     model: str | None = None
 
@@ -111,43 +57,16 @@ class CopilotResponse(BaseModel):
 
 
 # ============================================================
-# AI-010
+# AI-010: Daily Leader Briefing
 # ============================================================
 
-
 class LeaderBriefingRequest(BaseModel):
-    briefing_date: str = Field(
-        ...,
-        min_length=1,
-        max_length=20,
-    )
-
-    context: str = Field(
-        ...,
-        min_length=1,
-        max_length=20000,
-    )
-
-    user_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    user_role: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    organization_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    resource_organization_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
+    briefing_date: str = Field(..., min_length=1)
+    context: str = Field(..., min_length=1, max_length=30000)
+    user_id: str = Field(..., min_length=1)
+    user_role: str = Field(..., min_length=1)
+    organization_id: str = Field(..., min_length=1)
+    resource_organization_id: str = Field(..., min_length=1)
     provider: str | None = None
     model: str | None = None
 
@@ -167,43 +86,16 @@ class LeaderBriefingResponse(BaseModel):
 
 
 # ============================================================
-# AI-011
+# AI-011: Summarization
 # ============================================================
 
-
 class SummarizationRequest(BaseModel):
-    source_type: str = Field(
-        ...,
-        min_length=1,
-        max_length=50,
-    )
-
-    content: str = Field(
-        ...,
-        min_length=1,
-        max_length=30000,
-    )
-
-    user_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    user_role: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    organization_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    resource_organization_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
+    source_type: str = Field(..., min_length=1)
+    content: str = Field(..., min_length=1, max_length=30000)
+    user_id: str = Field(..., min_length=1)
+    user_role: str = Field(..., min_length=1)
+    organization_id: str = Field(..., min_length=1)
+    resource_organization_id: str = Field(..., min_length=1)
     provider: str | None = None
     model: str | None = None
 
@@ -220,49 +112,17 @@ class SummarizationResponse(BaseModel):
 
 
 # ============================================================
-# AI-012: Multilingual Translation
+# AI-012: Translation
 # ============================================================
 
-
 class TranslationRequest(BaseModel):
-    text: str = Field(
-        ...,
-        min_length=1,
-        max_length=20000,
-    )
-
-    source_language: str = Field(
-        ...,
-        min_length=1,
-        max_length=50,
-    )
-
-    target_language: str = Field(
-        ...,
-        min_length=1,
-        max_length=50,
-    )
-
-    user_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    user_role: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    organization_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    resource_organization_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
+    text: str = Field(..., min_length=1, max_length=30000)
+    source_language: str = Field(..., min_length=1)
+    target_language: str = Field(..., min_length=1)
+    user_id: str = Field(..., min_length=1)
+    user_role: str = Field(..., min_length=1)
+    organization_id: str = Field(..., min_length=1)
+    resource_organization_id: str = Field(..., min_length=1)
     provider: str | None = None
     model: str | None = None
 
@@ -283,42 +143,14 @@ class TranslationResponse(BaseModel):
 # AI-013: Indian-language Voice Transcription
 # ============================================================
 
-
 class TranscriptionRequest(BaseModel):
-    audio_reference: str = Field(
-        ...,
-        min_length=1,
-        max_length=500,
-    )
-
-    language: str = Field(
-        ...,
-        min_length=1,
-        max_length=50,
-    )
-
+    audio_reference: str = Field(..., min_length=1, max_length=10000)
+    language: str = Field(..., min_length=1)
     speaker_confirmation_required: bool = True
-
-    user_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    user_role: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    organization_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
-    resource_organization_id: str = Field(
-        ...,
-        min_length=1,
-    )
-
+    user_id: str = Field(..., min_length=1)
+    user_role: str = Field(..., min_length=1)
+    organization_id: str = Field(..., min_length=1)
+    resource_organization_id: str = Field(..., min_length=1)
     provider: str | None = None
     model: str | None = None
 
@@ -328,6 +160,126 @@ class TranscriptionResponse(BaseModel):
     language: str
     speaker_confirmation_required: bool
     speaker_confirmed: bool
+    coverage: str
+    freshness: str
+    provider: str
+    model: str
+    pii_masked: bool
+    prompt_injection_detected: bool
+
+
+# ============================================================
+# AI-016: Citizen Issue Classification
+# ============================================================
+
+class IssueClassificationRequest(BaseModel):
+    issue_text: str = Field(..., min_length=1, max_length=10000)
+    user_id: str = Field(..., min_length=1)
+    user_role: str = Field(..., min_length=1)
+    organization_id: str = Field(..., min_length=1)
+    resource_organization_id: str = Field(..., min_length=1)
+    provider: str | None = None
+    model: str | None = None
+
+
+class IssueClassificationResponse(BaseModel):
+    category: str
+    priority: str
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    needs_human_review: bool
+    coverage: str
+    freshness: str
+    provider: str
+    model: str
+    pii_masked: bool
+    prompt_injection_detected: bool
+
+
+class IssueClassificationCorrectionRequest(BaseModel):
+    issue_id: str = Field(..., min_length=1)
+    original_category: str = Field(..., min_length=1)
+    corrected_category: str = Field(..., min_length=1)
+    user_id: str = Field(..., min_length=1)
+    user_role: str = Field(..., min_length=1)
+    organization_id: str = Field(..., min_length=1)
+    resource_organization_id: str = Field(..., min_length=1)
+
+
+class IssueClassificationCorrectionResponse(BaseModel):
+    issue_id: str
+    original_category: str
+    corrected_category: str
+    feedback_recorded: bool
+
+
+# ============================================================
+# AI-017: AI-Assisted Clustering
+# ============================================================
+
+class ClusteringSuggestionRequest(BaseModel):
+    items: str = Field(..., min_length=1, max_length=30000)
+    user_id: str = Field(..., min_length=1)
+    user_role: str = Field(..., min_length=1)
+    organization_id: str = Field(..., min_length=1)
+    resource_organization_id: str = Field(..., min_length=1)
+    provider: str | None = None
+    model: str | None = None
+
+
+class ClusteringSuggestionResponse(BaseModel):
+    suggestions: list[str]
+    confidence: float = Field(..., ge=0.0, le=1.0)
+    needs_human_review: bool
+    coverage: str
+    freshness: str
+    provider: str
+    model: str
+    pii_masked: bool
+    prompt_injection_detected: bool
+
+
+# ============================================================
+# AI-018: Ground-Intelligence Analytics
+# ============================================================
+
+class GroundAnalyticsRequest(BaseModel):
+    data: str = Field(..., min_length=1, max_length=30000)
+    user_id: str = Field(..., min_length=1)
+    user_role: str = Field(..., min_length=1)
+    organization_id: str = Field(..., min_length=1)
+    resource_organization_id: str = Field(..., min_length=1)
+    provider: str | None = None
+    model: str | None = None
+
+
+class GroundAnalyticsResponse(BaseModel):
+    trends: list[str]
+    workload: list[str]
+    reporting_gaps: list[str]
+    coverage: str
+    freshness: str
+    provider: str
+    model: str
+    pii_masked: bool
+    prompt_injection_detected: bool
+
+
+# ============================================================
+# AI-019: Dark Unit Radar
+# ============================================================
+
+class DarkUnitRadarRequest(BaseModel):
+    data: str = Field(..., min_length=1, max_length=30000)
+    user_id: str = Field(..., min_length=1)
+    user_role: str = Field(..., min_length=1)
+    organization_id: str = Field(..., min_length=1)
+    resource_organization_id: str = Field(..., min_length=1)
+    provider: str | None = None
+    model: str | None = None
+
+
+class DarkUnitRadarResponse(BaseModel):
+    dark_units: list[str]
     coverage: str
     freshness: str
     provider: str
