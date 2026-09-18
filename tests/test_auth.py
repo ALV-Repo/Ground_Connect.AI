@@ -445,3 +445,239 @@ def test_jailbroken_device_is_blocked(auth_service):
     assert result["message"] == (
         "Access denied. Jailbroken device detected."
     )
+
+# =========================================================
+# BE-002 Device Registration & Session Tests
+# =========================================================
+
+def test_device_registration(auth_service):
+    result = auth_service.register_device(
+        "be002_user_001",
+        "be002_device_001",
+    )
+
+    assert result["registered"] is True
+    assert result["user_id"] == "be002_user_001"
+    assert result["device_id"] == "be002_device_001"
+
+
+def test_unregistered_device_requires_step_up(auth_service):
+    result = auth_service.create_session(
+        "be002_user_002",
+        "unregistered_device_001",
+    )
+
+    assert result["session_created"] is False
+    assert result["session_id"] is None
+    assert result["access_token"] is None
+    assert result["refresh_token"] is None
+    assert result["step_up_required"] is True
+
+
+def test_session_creation_and_device_binding(auth_service):
+    user_id = "be002_user_003"
+    device_id = "be002_device_003"
+
+    auth_service.register_device(
+        user_id,
+        device_id,
+    )
+
+    result = auth_service.create_session(
+        user_id,
+        device_id,
+    )
+
+    assert result["session_created"] is True
+    assert result["session_id"] is not None
+    assert result["access_token"] is not None
+    assert result["refresh_token"] is not None
+    assert result["device_id"] == device_id
+    assert result["step_up_required"] is False
+    assert result["idle_expires_in_seconds"] == 1800
+    assert result["absolute_expires_in_seconds"] == 86400
+
+
+def test_refresh_token_rotation(auth_service):
+    user_id = "be002_user_004"
+    device_id = "be002_device_004"
+
+    auth_service.register_device(
+        user_id,
+        device_id,
+    )
+
+    session = auth_service.create_session(
+        user_id,
+        device_id,
+    )
+
+    old_refresh_token = session["refresh_token"]
+
+    result = auth_service.refresh_session(
+        old_refresh_token,
+    )
+
+    assert result["refreshed"] is True
+    assert result["session_id"] == session["session_id"]
+    assert result["access_token"] is not None
+    assert result["refresh_token"] is not None
+    assert result["refresh_token"] != old_refresh_token
+    assert result["family_invalidated"] is False
+    assert result["security_event"] is False
+
+
+def test_refresh_token_reuse_invalidates_family(auth_service):
+    user_id = "be002_user_005"
+    device_id = "be002_device_005"
+
+    auth_service.register_device(
+        user_id,
+        device_id,
+    )
+
+    session = auth_service.create_session(
+        user_id,
+        device_id,
+    )
+
+    old_refresh_token = session["refresh_token"]
+
+    # First use rotates the refresh token.
+    first_refresh = auth_service.refresh_session(
+        old_refresh_token,
+    )
+
+    assert first_refresh["refreshed"] is True
+
+    # Reusing the old token must invalidate the entire family.
+    reuse_result = auth_service.refresh_session(
+        old_refresh_token,
+    )
+
+    assert reuse_result["refreshed"] is False
+    assert reuse_result["family_invalidated"] is True
+    assert reuse_result["security_event"] is True
+
+    status = auth_service.session_status(
+        session["session_id"],
+    )
+
+    assert status["active"] is False
+    assert status["revoked"] is True
+    assert status["purge_offline_data"] is True
+
+
+def test_remote_logout(auth_service):
+    user_id = "be002_user_006"
+    device_id = "be002_device_006"
+
+    auth_service.register_device(
+        user_id,
+        device_id,
+    )
+
+    session = auth_service.create_session(
+        user_id,
+        device_id,
+    )
+
+    result = auth_service.logout_session(
+        session["session_id"],
+    )
+
+    assert result["logged_out"] is True
+    assert result["session_id"] == session["session_id"]
+    assert result["purge_offline_data"] is True
+
+    status = auth_service.session_status(
+        session["session_id"],
+    )
+
+    assert status["active"] is False
+    assert status["revoked"] is True
+    assert status["purge_offline_data"] is True
+
+
+def test_device_revocation(auth_service):
+    user_id = "be002_user_007"
+    device_id = "be002_device_007"
+
+    auth_service.register_device(
+        user_id,
+        device_id,
+    )
+
+    session = auth_service.create_session(
+        user_id,
+        device_id,
+    )
+
+    assert session["session_created"] is True
+
+    result = auth_service.revoke_device(
+        user_id,
+        device_id,
+    )
+
+    assert result["revoked"] is True
+    assert result["user_id"] == user_id
+    assert result["device_id"] == device_id
+    assert result["affected_sessions"] == 1
+    assert result["purge_offline_data"] is True
+
+
+def test_revoked_device_cannot_create_session(auth_service):
+    user_id = "be002_user_008"
+    device_id = "be002_device_008"
+
+    auth_service.register_device(
+        user_id,
+        device_id,
+    )
+
+    revoke_result = auth_service.revoke_device(
+        user_id,
+        device_id,
+    )
+
+    assert revoke_result["revoked"] is True
+
+    result = auth_service.create_session(
+        user_id,
+        device_id,
+    )
+
+    assert result["session_created"] is False
+    assert result["step_up_required"] is True
+    assert result["session_id"] is None
+    assert result["access_token"] is None
+    assert result["refresh_token"] is None
+
+
+def test_session_status(auth_service):
+    user_id = "be002_user_009"
+    device_id = "be002_device_009"
+
+    auth_service.register_device(
+        user_id,
+        device_id,
+    )
+
+    session = auth_service.create_session(
+        user_id,
+        device_id,
+    )
+
+    result = auth_service.session_status(
+        session["session_id"],
+    )
+
+    assert result["active"] is True
+    assert result["session_id"] == session["session_id"]
+    assert result["user_id"] == user_id
+    assert result["device_id"] == device_id
+    assert result["idle_expired"] is False
+    assert result["absolute_expired"] is False
+    assert result["revoked"] is False
+    assert result["purge_offline_data"] is False
