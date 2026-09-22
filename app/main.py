@@ -16,6 +16,7 @@ from app.api.routes.notifications import router as notifications_router
 from app.api.routes.performance import router as performance_router
 from app.api.routes.recovery import router as recovery_router
 from app.api.routes.observability import router as observability_router
+from app.api.routes.citizen import router as citizen_router
 
 
 app = FastAPI(
@@ -160,5 +161,15 @@ app.include_router(
 
 app.include_router(
     observability_router,
+    prefix="/api/v1",
+)
+
+
+# ============================================================
+# BE-018: Citizen Issue Intake & Clustering
+# ============================================================
+
+app.include_router(
+    citizen_router,
     prefix="/api/v1",
 )
