@@ -444,10 +444,7 @@ BEGIN
         ),
         repeat('0', 64)
     )
-    INTO v_prev_hash
-    FROM audit_trail.audit_events
-    WHERE organization_id = p_organization_id
-    LIMIT 1;
+    INTO v_prev_hash;
 
     v_hash := audit_trail.audit_event_hash(
         v_prev_hash,
