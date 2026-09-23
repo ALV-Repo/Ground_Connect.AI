@@ -19,6 +19,10 @@
 --
 --   The script creates a dedicated NOLOGIN test role and uses SET ROLE.
 --
+--   Tenant context is always established with:
+--       SET LOCAL app.organization_id = '<authenticated-tenant-uuid>';
+--   inside an explicit transaction, matching tenant_rls.sql.
+--
 --   The metadata tests cover every tenant table discovered from
 --   organization_id.
 --
@@ -168,6 +172,8 @@ $$;
 -- ================================================================
 -- 5. EXECUTE ISOLATION TESTS AS NON-BYPASSRLS ROLE
 -- ================================================================
+
+BEGIN;
 
 SET ROLE rls_test_executor;
 
@@ -334,12 +340,11 @@ BEGIN
     SELECT COUNT(*)
     INTO v_count
     FROM tenant_and_configuration.hierarchy_levels
-    WHERE id = '00000000-0000-0000-0000-00000000b001'
-      AND name = 'CROSS TENANT UPDATE ATTEMPT';
+    WHERE id = '00000000-0000-0000-0000-00000000b001';
 
     IF v_count <> 0 THEN
         RAISE EXCEPTION
-            'TEN-04 FAILED: Tenant A updated Tenant B data';
+            'TEN-04 FAILED: Tenant A can see Tenant B row after UPDATE attempt';
     END IF;
 
 END;
@@ -365,11 +370,8 @@ BEGIN
     WHERE id = '00000000-0000-0000-0000-00000000b001';
 
     IF v_count <> 0 THEN
-        -- RLS should hide the row.
-        -- The important assertion is that the row still exists for
-        -- the administrative verification after RESET ROLE.
         RAISE EXCEPTION
-            'Unexpected visibility of Tenant B row during DELETE test';
+            'TEN-04 FAILED: Tenant A can see Tenant B row after DELETE attempt';
     END IF;
 
 END;
@@ -526,6 +528,27 @@ $$;
 RESET app.organization_id;
 
 RESET ROLE;
+
+COMMIT;
+
+-- Administrative verification confirms the cross-tenant UPDATE/DELETE
+-- attempts did not modify or remove Tenant B's row.
+DO $$
+DECLARE
+    v_name TEXT;
+    v_count INTEGER;
+BEGIN
+    SELECT COUNT(*), MAX(name)
+    INTO v_count, v_name
+    FROM tenant_and_configuration.hierarchy_levels
+    WHERE id = '00000000-0000-0000-0000-00000000b001';
+
+    IF v_count <> 1 OR v_name <> 'RLS TEST B' THEN
+        RAISE EXCEPTION
+            'TEN-04 FAILED: Tenant B row was modified or deleted by cross-tenant test';
+    END IF;
+END;
+$$;
 
 
 -- ================================================================
