@@ -122,7 +122,7 @@ CREATE TABLE tenant_and_configuration.hierarchy_levels
 		FOREIGN KEY(organization_id)
 		REFERENCES tenant_and_configuration.tenants(id),
 
-	CONSTRAINT unq_hirarchy_levels_org_level
+	CONSTRAINT uq_hirarchy_levels_org_level
 		UNIQUE (organization_id, level_index),
 
 	CONSTRAINT chk_hierarchy_level_index
@@ -162,10 +162,10 @@ CREATE TABLE identity_authentication_sessions.users (
     --     FOREIGN KEY (import_batch_id)
     --     REFERENCES identity_authentication_sessions.import_batches(id),
 
-    CONSTRAINT unq_users_mobile_encrypted
+    CONSTRAINT uq_users_mobile_encrypted
         UNIQUE (mobile_encrypted),
 
-    CONSTRAINT unq_users_mobile_hash
+    CONSTRAINT uq_users_mobile_hash
         UNIQUE (mobile_hash),
 
     CONSTRAINT chk_users_preferred_language
@@ -175,7 +175,9 @@ CREATE TABLE identity_authentication_sessions.users (
                 'hi',
                 'kn',
                 'ta',
-                'te'
+                'te',
+				'ml'
+				'mr'
             )
         ),
 
@@ -232,7 +234,7 @@ CREATE TABLE identity_authentication_sessions.devices (
 	    REFERENCES identity_authentication_sessions.users(id),
 
     -- Device fingerprint must be unique
-    CONSTRAINT unq_devices_fingerprint
+    CONSTRAINT uq_devices_fingerprint
         UNIQUE (device_fingerprint),
 
     -- Platform
@@ -311,11 +313,11 @@ CREATE TABLE identity_authentication_sessions.sessions (
         REFERENCES identity_authentication_sessions.devices(id),
 
     -- Refresh token hash must be unique
-    CONSTRAINT unq_sessions_refresh_token_hash
+    CONSTRAINT uq_sessions_refresh_token_hash
         UNIQUE (refresh_token_hash),
 
     -- Access token JTI must be unique
-    CONSTRAINT unq_sessions_access_token_jti
+    CONSTRAINT uq_sessions_access_token_jti
         UNIQUE (access_token_jti),
 
     -- Valid revoke reasons
@@ -1677,7 +1679,7 @@ CREATE TABLE audit_trail.audit_events (
 
 
     -- Sequence must be unique
-    CONSTRAINT unq_audit_events_seq
+    CONSTRAINT uq_audit_events_seq
         UNIQUE (seq)
 );
 
@@ -1698,12 +1700,15 @@ ON audit_trail.audit_events (created_at);
 -- creating table audit_checkpoints
 
 CREATE TABLE audit_trail.audit_checkpoints (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
     organization_id UUID NOT NULL,
     seq_at_checkpoint BIGINT NOT NULL,
     chain_hash TEXT NOT NULL,
     checkpointed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     external_storage_ref TEXT NOT NULL,
+
+	CONSTRAINT pk_audit_checkpoints
+        PRIMARY KEY (id)
 
 );
 
