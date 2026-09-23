@@ -23,7 +23,7 @@ CREATE TABLE tenant_and_configuration.tenants
 	CONSTRAINT chk_tenant_status
 	CHECK (
 		status IN (
-			'ative',
+			'active',
 			'suspended',
 			'offboarded'
 		)
