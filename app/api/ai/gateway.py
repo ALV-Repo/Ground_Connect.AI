@@ -1,4 +1,5 @@
 from app.api.ai.fallback import fallback_provider
+from app.api.ai.providers.mock import mock_provider
 from app.core.config import settings
 
 
@@ -11,11 +12,17 @@ class AIGateway:
     """
 
     def __init__(self):
-        self.provider_name = settings.ai_provider.lower()
+        self.provider_name = settings.ai_provider.strip().lower()
 
-        # Current implementation intentionally uses
-        # deterministic fallback/mock provider.
-        self.provider = fallback_provider
+        providers = {
+            "mock": mock_provider,
+            "fallback": fallback_provider,
+        }
+
+        self.provider = providers.get(
+            self.provider_name,
+            fallback_provider,
+        )
 
     def summarize(
         self,

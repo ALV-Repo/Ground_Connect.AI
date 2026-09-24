@@ -6,6 +6,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from app.core.config import settings
+
 
 # =========================================================
 # CONFIGURATION
@@ -22,16 +24,12 @@ LOCKOUT_DURATIONS = [
     300,
 ]
 
+OTP_RATE_LIMIT_WINDOW_SECONDS = 60
+OTP_REQUEST_LIMIT = 5
+OTP_VERIFY_LIMIT = 10
+
 DATA_DIR = Path(".auth_data")
 LOCKOUT_FILE = DATA_DIR / "lockouts.json"
-
-ELEVATED_ROLES = {
-    "leader",
-    "org admin",
-    "compliance",
-    "security admin",
-    "platform operator",
-}
 
 
 # =========================================================
@@ -116,6 +114,9 @@ class AuthService:
 
         self._recovery_store: dict[str, OTPRecord] = {}
 
+        self._otp_request_windows: dict[str, list[float]] = {}
+        self._otp_verify_windows: dict[str, list[float]] = {}
+
         self._verified_identities: set[str] = set()
 
         # -------------------------------------------------
@@ -198,14 +199,39 @@ class AuthService:
 
 
     @staticmethod
+    def _check_otp_rate_limit(
+        key: str,
+        limit: int,
+        now: float,
+        windows: dict[str, list[float]],
+    ) -> None:
+        window = windows.setdefault(key, [])
+
+        cutoff = now - OTP_RATE_LIMIT_WINDOW_SECONDS
+        windows[key] = [
+            timestamp
+            for timestamp in window
+            if timestamp > cutoff
+        ]
+
+        if len(windows[key]) >= limit:
+            raise PermissionError("OTP rate limit exceeded")
+
+        windows[key].append(now)
+
+
+    @staticmethod
     def is_elevated_role(
         role: str,
     ) -> bool:
 
-        return (
-            role.strip().lower()
-            in ELEVATED_ROLES
-        )
+        elevated_roles = {
+            item.strip().lower()
+            for item in settings.authorization_elevated_roles.split(",")
+            if item.strip()
+        }
+
+        return role.strip().lower() in elevated_roles
 
 
     # =====================================================
@@ -291,10 +317,16 @@ class AuthService:
         self,
         phone_number: str,
     ):
+        now = time.time()
+
+        self._check_otp_rate_limit(
+            key=phone_number,
+            limit=OTP_REQUEST_LIMIT,
+            now=now,
+            windows=self._otp_request_windows,
+        )
 
         otp = self._generate_otp()
-
-        now = time.time()
 
         self._otp_store[
             phone_number
@@ -332,6 +364,13 @@ class AuthService:
     ):
 
         now = time.time()
+
+        self._check_otp_rate_limit(
+            key=f"{phone_number}:{source}",
+            limit=OTP_VERIFY_LIMIT,
+            now=now,
+            windows=self._otp_verify_windows,
+        )
 
         key = self._lockout_key(
             phone_number,
@@ -1469,7 +1508,62 @@ class AuthService:
             "message":
                 "Device revoked successfully. All active sessions were invalidated.",
         }
+        # =====================================================
+    # ACCESS TOKEN VALIDATION
+    # =====================================================
 
+    def validate_access_token(
+        self,
+        access_token: str,
+    ):
+        token_hash = self._hash_session_token(
+            access_token
+        )
+
+        matched_session = None
+
+        for session in self._sessions.values():
+            if (
+                session.access_token_hash
+                == token_hash
+            ):
+                matched_session = session
+                break
+
+        # Token not found
+        if matched_session is None:
+            return None
+
+        session = matched_session
+        now = time.time()
+
+        # Revoked session
+        if session.revoked_at is not None:
+            return None
+
+        # Absolute session expiry
+        if now >= session.absolute_expires_at:
+            session.revoked_at = now
+            session.purge_offline_data = True
+            return None
+
+        # Idle session expiry
+        if (
+            now - session.last_activity_at
+            > SESSION_IDLE_TIMEOUT_SECONDS
+        ):
+            session.revoked_at = now
+            session.purge_offline_data = True
+            return None
+
+        # Update activity timestamp
+        session.last_activity_at = now
+
+        return {
+            "user_id": session.user_id,
+            "session_id": session.session_id,
+            "device_id": session.device_id,
+        }
 
     # =====================================================
     # BE-002 SESSION TOKEN HASH

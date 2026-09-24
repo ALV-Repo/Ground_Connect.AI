@@ -555,3 +555,148 @@ def test_field_policy_change_invalidates_cache():
 
     assert second["allowed"] is False
     assert second["denied_fields"] == ["status"]
+
+
+def test_client_supplied_identity_values_are_not_trusted():
+    engine = make_engine()
+
+    engine.register_identity(
+        subject_id="user-client-001",
+        tenant_id="tenant-001",
+        branch_id="branch-001",
+        role="member",
+    )
+
+    request = AuthorizationRequest(
+        subject_id="user-client-001",
+        tenant_id="tenant-001",
+        resource_type="message",
+        resource_id="msg-001",
+        action="READ",
+        branch_id="branch-001",
+        client_identity={
+            "tenant_id": "tenant-999",
+            "branch_id": "branch-999",
+            "role": "platform operator",
+        },
+    )
+
+    decision = engine.authorize(request)
+
+    assert decision.allowed is False
+    assert decision.failing_rule == "CLIENT_IDENTITY_NOT_TRUSTED"
+
+def test_booth_worker_cannot_access_another_district_data():
+    engine = make_engine()
+
+    engine.register_identity(
+        subject_id="booth-worker-001",
+        tenant_id="tenant-001",
+        branch_id="district-a",
+        role="worker",
+    )
+
+    request = AuthorizationRequest(
+        subject_id="booth-worker-001",
+        tenant_id="tenant-001",
+        resource_type="district_data",
+        resource_id="district-b-data",
+        action="READ",
+        branch_id="district-b",
+    )
+
+    decision = engine.authorize(request)
+
+    assert decision.allowed is False
+
+def test_worker_cannot_access_another_workers_branch_records():
+    engine = make_engine()
+
+    engine.register_identity(
+        subject_id="worker-a",
+        tenant_id="tenant-001",
+        branch_id="branch-a",
+        role="worker",
+    )
+
+    request = AuthorizationRequest(
+        subject_id="worker-a",
+        tenant_id="tenant-001",
+        resource_type="branch_record",
+        resource_id="worker-b-record",
+        action="READ",
+        branch_id="branch-b",
+    )
+
+    decision = engine.authorize(request)
+
+    assert decision.allowed is False
+
+def test_transferred_user_cannot_access_former_branch_records():
+    engine = make_engine()
+
+    engine.register_identity(
+        subject_id="transferred-user",
+        tenant_id="tenant-001",
+        branch_id="branch-new",
+        role="worker",
+    )
+
+    request = AuthorizationRequest(
+        subject_id="transferred-user",
+        tenant_id="tenant-001",
+        resource_type="branch_record",
+        resource_id="former-branch-record",
+        action="READ",
+        branch_id="branch-old",
+    )
+
+    decision = engine.authorize(request)
+
+    assert decision.allowed is False
+
+def test_tenant_a_user_cannot_access_tenant_b_resource():
+    engine = make_engine()
+
+    engine.register_identity(
+        subject_id="tenant-a-user",
+        tenant_id="tenant-a",
+        branch_id="branch-a",
+        role="worker",
+    )
+
+    request = AuthorizationRequest(
+        subject_id="tenant-a-user",
+        tenant_id="tenant-b",
+        resource_type="message",
+        resource_id="tenant-b-message",
+        action="READ",
+        branch_id="branch-b",
+    )
+
+    decision = engine.authorize(request)
+
+    assert decision.allowed is False
+
+def test_permission_bypass_prompt_does_not_grant_access():
+    engine = make_engine()
+
+    engine.register_identity(
+        subject_id="user-001",
+        tenant_id="tenant-001",
+        branch_id="branch-a",
+        role="worker",
+    )
+
+    request = AuthorizationRequest(
+        subject_id="user-001",
+        tenant_id="tenant-001",
+        resource_type="district_data",
+        resource_id="district-b-data",
+        action="READ",
+        branch_id="branch-b",
+    )
+
+    decision = engine.authorize(request)
+
+    assert decision.allowed is False

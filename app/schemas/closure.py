@@ -13,6 +13,21 @@ class ClosureOutcome(str, Enum):
     DISPUTED_REOPENED = "Disputed-Reopened"
 
 
+class ClosureIssueRegistrationRequest(BaseModel):
+    issue_id: str = Field(..., min_length=1, max_length=128)
+    tenant_id: str = Field(..., min_length=1, max_length=128)
+    unit_id: str = Field(..., min_length=1, max_length=128)
+    severity: float = Field(default=1.0, ge=0.0, le=1.0)
+    corroboration_count: int = Field(default=0, ge=0)
+    sla_breached: bool = False
+
+
+class ClosureUnitRegistrationRequest(BaseModel):
+    tenant_id: str = Field(..., min_length=1, max_length=128)
+    unit_id: str = Field(..., min_length=1, max_length=128)
+    unit_size: float = Field(..., gt=0)
+    intake_volume: float = Field(..., gt=0)
+
 class ResolutionProposalRequest(BaseModel):
     issue_id: str = Field(..., min_length=1, max_length=128)
     tenant_id: str = Field(..., min_length=1, max_length=128)

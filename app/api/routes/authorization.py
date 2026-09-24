@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException
 
 from app.schemas.authorization import (
@@ -13,6 +15,9 @@ from app.schemas.authorization import (
     WhoCanAccessRequest,
 )
 from app.services.authorization import authorization_service
+
+
+logger = logging.getLogger(__name__)
 
 
 router = APIRouter(
@@ -238,7 +243,11 @@ def clear_authorization_cache():
     try:
         return authorization_service.clear_cache()
 
-    except Exception as exc:
+    except RuntimeError as exc:
+        logger.exception(
+            "Failed to clear authorization cache: %s",
+            exc,
+        )
         raise HTTPException(
             status_code=500,
             detail="Failed to clear authorization cache",

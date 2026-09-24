@@ -1,7 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-class Settings:
+class Settings(BaseSettings):
     # ---------------------------------------------------------
     # Application
     # ---------------------------------------------------------
@@ -35,6 +35,10 @@ class Settings:
 
     # Maximum lifetime of cached authorization decisions
     authorization_cache_ttl_seconds: int = 60
+
+    authorization_elevated_roles: str = (
+        "leader,org admin,compliance,security admin,platform operator"
+    )
 
     # ---------------------------------------------------------
     # BE-004: Audit / ADR
@@ -93,6 +97,8 @@ class Settings:
     # Environment marker
     environment: str = "development"
 
+    encryption_key: str | None = None
+
     # ---------------------------------------------------------
     # BE-013: Incident Response
     # ---------------------------------------------------------
@@ -133,6 +139,10 @@ class Settings:
     # Recovery Time Objective:
     # Maximum acceptable recovery time = 60 minutes
     recovery_time_objective_minutes: int = 60
+
+    # Destructive recovery test-data cleanup is disabled by default.
+    # Enable explicitly only for development/testing workflows.
+    recovery_test_data_enabled: bool = False
 
     # ---------------------------------------------------------
     # BE-017: Observability / SIEM

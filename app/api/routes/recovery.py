@@ -1,9 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.core.config import settings
+from app.schemas.recovery import (
+    BackupCreateRequest,
+    BackupValidationRequest,
+    RecoveryVerificationRequest,
+    RestoreRequest,
+)
 from app.services.recovery import recovery_service
 
 
@@ -20,20 +27,20 @@ router = APIRouter(
 
 @router.post("/backups")
 def create_backup(
-    payload: Dict[str, Any],
+    payload: BackupCreateRequest,
 ):
     """
     Create a backup record.
     """
     try:
         return recovery_service.create_backup(
-            backup_id=payload.get("backup_id"),
-            backup_type=payload.get("backup_type", "full"),
-            source=payload.get("source", "application"),
-            size_bytes=payload.get("size_bytes", 0),
-            checksum=payload.get("checksum"),
-            location=payload.get("location"),
-            metadata=payload.get("metadata"),
+            backup_id=payload.backup_id,
+            backup_type=payload.backup_type,
+            source=payload.source,
+            size_bytes=payload.size_bytes,
+            checksum=payload.checksum,
+            location=payload.location,
+            metadata=payload.metadata,
         )
 
     except ValueError as exc:
@@ -98,17 +105,17 @@ def list_backups(
 
 @router.post("/restore")
 def restore_backup(
-    payload: Dict[str, Any],
+    payload: RestoreRequest,
 ):
     """
     Restore the system from a selected backup.
     """
     try:
         return recovery_service.restore(
-            backup_id=payload.get("backup_id"),
-            requested_by=payload.get("requested_by"),
-            target=payload.get("target", "application"),
-            dry_run=payload.get("dry_run", False),
+            backup_id=payload.backup_id,
+            requested_by=payload.requested_by,
+            target=payload.target,
+            dry_run=payload.dry_run,
         )
 
     except KeyError as exc:
@@ -131,14 +138,14 @@ def restore_backup(
 
 @router.post("/validate")
 def validate_recovery(
-    payload: Dict[str, Any],
+    payload: BackupValidationRequest,
 ):
     """
     Validate whether a backup is suitable for recovery.
     """
     try:
         return recovery_service.validate_backup(
-            backup_id=payload.get("backup_id"),
+            backup_id=payload.backup_id,
         )
 
     except KeyError as exc:
@@ -154,17 +161,22 @@ def validate_recovery(
         ) from exc
 
 
+# ============================================================
+# Recovery Verification
+# ============================================================
+
+
 @router.post("/verify")
 def verify_recovery(
-    payload: Dict[str, Any],
+    payload: RecoveryVerificationRequest,
 ):
     """
     Verify recovery readiness / recovery test result.
     """
     try:
         return recovery_service.verify_recovery(
-            backup_id=payload.get("backup_id"),
-            requested_by=payload.get("requested_by"),
+            backup_id=payload.backup_id,
+            requested_by=payload.requested_by,
         )
 
     except KeyError as exc:
@@ -281,8 +293,16 @@ def rpo_rto_status():
 def clear_test_data():
     """
     Clear recovery test data.
-    Intended for development/testing workflows.
+
+    This destructive development/testing operation is disabled
+    unless explicitly enabled through configuration.
     """
+    if not settings.recovery_test_data_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="Recovery test-data deletion is disabled.",
+        )
+
     try:
         return recovery_service.clear_test_data()
 

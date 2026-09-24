@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import json
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.schemas.vendor import VendorElevationRequest
 from app.services.vendor import vendor_elevation_service
 
 
@@ -21,48 +21,19 @@ router = APIRouter(
 
 @router.post("/elevation")
 def request_elevation(
-    vendor_id: str = Query(...),
-    tenant_id: str = Query(...),
-    requested_by: str = Query(...),
-    reason: str = Query(...),
-    duration_minutes: Optional[int] = Query(None, ge=1),
-    scopes: Optional[list[str]] = Query(None),
+    request: VendorElevationRequest,
 ):
     """
     Request temporary vendor support elevation.
     """
     try:
-        # Swagger may send a JSON array as a single query string:
-        # ["read", "write"]
-        #
-        # FastAPI can receive that as:
-        # ['["read", "write"]']
-        #
-        # Convert it into:
-        # ["read", "write"]
-
-        parsed_scopes = scopes
-
-        if scopes and len(scopes) == 1:
-            try:
-                parsed = json.loads(scopes[0])
-
-                if isinstance(parsed, list):
-                    parsed_scopes = [
-                        str(scope)
-                        for scope in parsed
-                    ]
-            except (json.JSONDecodeError, TypeError):
-                # Keep the original value if it is not valid JSON.
-                parsed_scopes = scopes
-
         return vendor_elevation_service.request_elevation(
-            vendor_id=vendor_id,
-            tenant_id=tenant_id,
-            requested_by=requested_by,
-            reason=reason,
-            duration_minutes=duration_minutes,
-            scopes=parsed_scopes,
+            vendor_id=request.vendor_id,
+            tenant_id=request.tenant_id,
+            requested_by=request.requested_by,
+            reason=request.reason,
+            duration_minutes=request.duration_minutes,
+            scopes=request.scopes,
         )
 
     except ValueError as exc:

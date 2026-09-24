@@ -5,6 +5,7 @@ from app.schemas.privacy import (
     DataCorrectionRequest,
     ErasureRequest,
     LegalHoldRequest,
+    PrincipalDataRegisterRequest,
     PrivacyInteractionCreate,
     RetentionPolicyCreate,
 )
@@ -28,19 +29,17 @@ def record_interaction(
 
 @router.post("/data/register")
 def register_principal_data(
-    tenant_id: str = Query(...),
-    principal_id: str = Query(...),
-    data: dict = None,
+    request: PrincipalDataRegisterRequest,
 ):
     privacy_service.register_principal_data(
-        tenant_id=tenant_id,
-        principal_id=principal_id,
-        data=data or {},
+        tenant_id=request.tenant_id,
+        principal_id=request.principal_id,
+        data=request.data,
     )
 
     return {
-        "tenant_id": tenant_id,
-        "principal_id": principal_id,
+        "tenant_id": request.tenant_id,
+        "principal_id": request.principal_id,
         "registered": True,
     }
 

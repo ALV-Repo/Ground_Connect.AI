@@ -8,7 +8,42 @@ import time
 from dataclasses import dataclass, asdict
 from enum import Enum
 from typing import Any
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
+from app.services.auth import auth_service
+from app.core.config import settings
+
+# =========================================================
+# API AUTHENTICATION
+# =========================================================
+
+bearer_scheme = HTTPBearer(
+    auto_error=True
+)
+
+
+def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(
+        bearer_scheme
+    ),
+):
+    access_token = credentials.credentials
+
+    session = auth_service.validate_access_token(
+        access_token
+    )
+
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired access token.",
+            headers={
+                "WWW-Authenticate": "Bearer"
+            },
+        )
+
+    return session
 
 # ============================================================
 # BE-012: Transport & At-Rest Encryption
@@ -115,13 +150,10 @@ class AESGCMEncryption:
             self._AESGCM = None
 
         if key is None:
-            # Development-only ephemeral key.
-            #
-            # IMPORTANT:
-            # This key changes when the application restarts.
-            # Production must provide a persistent secret from a
-            # proper secret-management system.
-            key = secrets.token_bytes(self.KEY_SIZE)
+            raise SecurityConfigurationError(
+                "ENCRYPTION_KEY must be configured. "
+                "Ephemeral encryption keys are not allowed."
+            )
 
         if isinstance(key, str):
             key = self._decode_key(key)
@@ -1105,7 +1137,9 @@ transport_security = TransportSecurity()
 # Development key only.
 # Production should initialise this using a secure environment/
 # secret-management value.
-encryption_service = AESGCMEncryption()
+encryption_service = AESGCMEncryption(
+    settings.encryption_key
+)
 
 field_encryptor = SensitiveFieldEncryptor(
     encryption_service

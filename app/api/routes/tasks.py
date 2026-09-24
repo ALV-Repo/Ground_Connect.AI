@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.schemas.tasks import (
+    EvidenceCreateRequest,
+    TaskCreateRequest,
+    TaskUpdateRequest,
+)
 from app.services.tasks import task_service
 
 
@@ -20,22 +25,22 @@ router = APIRouter(
 
 @router.post("")
 def create_task(
-    payload: Dict[str, Any],
+    payload: TaskCreateRequest,
 ):
     """
     Create a task.
     """
     try:
         return task_service.create_task(
-            task_id=payload.get("task_id"),
-            tenant_id=payload.get("tenant_id"),
-            title=payload.get("title"),
-            description=payload.get("description"),
-            created_by=payload.get("created_by"),
-            assignee_id=payload.get("assignee_id"),
-            priority=payload.get("priority", "normal"),
-            due_at=payload.get("due_at"),
-            metadata=payload.get("metadata"),
+            task_id=payload.task_id,
+            tenant_id=payload.tenant_id,
+            title=payload.title,
+            description=payload.description,
+            created_by=payload.created_by,
+            assignee_id=payload.assignee_id,
+            priority=payload.priority,
+            due_at=payload.due_at,
+            metadata=payload.metadata,
         )
 
     except ValueError as exc:
@@ -148,8 +153,8 @@ def get_task(
 @router.patch("/{task_id}")
 def update_task(
     task_id: str,
+    payload: TaskUpdateRequest,
     tenant_id: str = Query(...),
-    payload: Dict[str, Any] | None = None,
 ):
     """
     Update task information.
@@ -158,13 +163,13 @@ def update_task(
         return task_service.update_task(
             task_id=task_id,
             tenant_id=tenant_id,
-            title=(payload or {}).get("title"),
-            description=(payload or {}).get("description"),
-            assignee_id=(payload or {}).get("assignee_id"),
-            priority=(payload or {}).get("priority"),
-            due_at=(payload or {}).get("due_at"),
-            status=(payload or {}).get("status"),
-            metadata=(payload or {}).get("metadata"),
+            title=payload.title,
+            description=payload.description,
+            assignee_id=payload.assignee_id,
+            priority=payload.priority,
+            due_at=payload.due_at,
+            status=payload.status,
+            metadata=payload.metadata,
         )
 
     except KeyError as exc:
@@ -238,22 +243,22 @@ def task_action(
 @router.post("/{task_id}/evidence")
 def add_evidence(
     task_id: str,
-    payload: Dict[str, Any],
+    payload: EvidenceCreateRequest,
 ):
     """
     Add evidence to a task.
     """
     try:
         return task_service.add_evidence(
-            evidence_id=payload.get("evidence_id"),
+            evidence_id=payload.evidence_id,
             task_id=task_id,
-            uploaded_by=payload.get("uploaded_by"),
-            file_name=payload.get("file_name"),
-            content_type=payload.get("content_type"),
-            size_bytes=payload.get("size_bytes", 0),
-            sha256=payload.get("sha256"),
-            storage_reference=payload.get("storage_reference"),
-            metadata=payload.get("metadata"),
+            uploaded_by=payload.uploaded_by,
+            file_name=payload.file_name,
+            content_type=payload.content_type,
+            size_bytes=payload.size_bytes,
+            sha256=payload.sha256,
+            storage_reference=payload.storage_reference,
+            metadata=payload.metadata,
         )
 
     except KeyError as exc:

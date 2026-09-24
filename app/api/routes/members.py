@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.schemas.members import (
+    BulkMemberImportRequest,
+    MemberCreateRequest,
+    MemberUpdateRequest,
+)
 from app.services.members import member_service
 
 
@@ -20,22 +25,22 @@ router = APIRouter(
 
 @router.post("")
 def create_member(
-    payload: Dict[str, Any],
+    payload: MemberCreateRequest,
 ):
     """
     Create a new member.
     """
     try:
         return member_service.create_member(
-            member_id=payload.get("member_id"),
-            tenant_id=payload.get("tenant_id"),
-            name=payload.get("name"),
-            role=payload.get("role", "member"),
-            branch_id=payload.get("branch_id"),
-            mobile=payload.get("mobile"),
-            email=payload.get("email"),
-            status=payload.get("status", "active"),
-            metadata=payload.get("metadata"),
+            member_id=payload.member_id,
+            tenant_id=payload.tenant_id,
+            name=payload.name,
+            role=payload.role,
+            branch_id=payload.branch_id,
+            mobile=payload.mobile,
+            email=payload.email,
+            status=payload.status,
+            metadata=payload.metadata,
         )
 
     except ValueError as exc:
@@ -83,25 +88,23 @@ def get_member(
 @router.patch("/{member_id}")
 def update_member(
     member_id: str,
+    payload: MemberUpdateRequest,
     tenant_id: str = Query(...),
-    payload: Dict[str, Any] = None,
 ):
     """
     Update member information.
     """
-    payload = payload or {}
-
     try:
         return member_service.update_member(
             member_id=member_id,
             tenant_id=tenant_id,
-            name=payload.get("name"),
-            mobile=payload.get("mobile"),
-            email=payload.get("email"),
-            role=payload.get("role"),
-            status=payload.get("status"),
-            branch_id=payload.get("branch_id"),
-            metadata=payload.get("metadata"),
+            name=payload.name,
+            mobile=payload.mobile,
+            email=payload.email,
+            role=payload.role,
+            status=payload.status,
+            branch_id=payload.branch_id,
+            metadata=payload.metadata,
         )
 
     except KeyError as exc:
@@ -254,25 +257,25 @@ def search_members(
 
 @router.post("/bulk-import")
 def bulk_import_members(
-    tenant_id: str = Query(...),
-    imported_by: str = Query(...),
-    members: list[Dict[str, Any]] = [],
+    payload: BulkMemberImportRequest,
 ):
     """
     Bulk import members into a tenant.
     """
     try:
         result = member_service.bulk_import(
-            tenant_id=tenant_id,
-            records=members,
-            source="api",
-            dry_run=False,
+            tenant_id=payload.tenant_id,
+            records=[
+                member.model_dump()
+                for member in payload.records
+            ],
+            source=payload.source,
+            dry_run=payload.dry_run,
         )
 
         return {
             "success": result["failed"] == 0,
             "result": result,
-            "imported_by": imported_by,
         }
 
     except ValueError as exc:

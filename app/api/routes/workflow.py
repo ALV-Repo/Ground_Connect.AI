@@ -5,6 +5,7 @@ from app.schemas.workflow import (
     IssueStatusUpdateRequest,
     RejectionRequest,
     SLAConfigCreate,
+    WorkflowIssueRegistrationRequest,
 )
 from app.services.workflow import workflow_service
 
@@ -23,16 +24,14 @@ def configure_sla(request: SLAConfigCreate):
 @router.post("/issues/{issue_id}/register", response_model=dict)
 def register_issue(
     issue_id: str,
-    tenant_id: str = Query(...),
-    category: str = Query(...),
-    priority: str = Query(...),
+    request: WorkflowIssueRegistrationRequest,
 ):
     try:
         return workflow_service.register_issue(
             issue_id=issue_id,
-            tenant_id=tenant_id,
-            category=category,
-            priority=priority,
+            tenant_id=request.tenant_id,
+            category=request.category,
+            priority=request.priority,
         ).model_dump(mode="json")
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))

@@ -1,9 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.core.config import settings
+from app.schemas.performance import (
+    LoadControlRequest,
+    PerformanceOperationRequest,
+)
 from app.services.performance import performance_service
 
 
@@ -20,21 +25,21 @@ router = APIRouter(
 
 @router.post("/operations")
 def record_operation(
-    payload: Dict[str, Any],
+    payload: PerformanceOperationRequest,
 ):
     """
     Record execution information for an operation.
     """
     try:
         return performance_service.record_operation(
-            operation=payload.get("operation"),
-            duration_ms=payload.get("duration_ms"),
-            success=payload.get("success", True),
-            endpoint=payload.get("endpoint"),
-            tenant_id=payload.get("tenant_id"),
-            status_code=payload.get("status_code"),
-            correlation_id=payload.get("correlation_id"),
-            metadata=payload.get("metadata"),
+            operation=payload.operation,
+            duration_ms=payload.duration_ms,
+            success=payload.success,
+            endpoint=payload.endpoint,
+            tenant_id=payload.tenant_id,
+            status_code=payload.status_code,
+            correlation_id=payload.correlation_id,
+            metadata=payload.metadata,
         )
 
     except ValueError as exc:
@@ -167,13 +172,7 @@ def timeout_configuration(
     try:
         if duration_ms is None:
             return {
-                "timeout_seconds": getattr(
-                    __import__(
-                        "app.core.config",
-                        fromlist=["settings"],
-                    ),
-                    "settings",
-                ).request_timeout_seconds
+                "timeout_seconds": settings.request_timeout_seconds
             }
 
         return performance_service.check_request_timeout(
@@ -200,18 +199,15 @@ def timeout_configuration(
 
 @router.post("/load-control")
 def load_control(
-    payload: Dict[str, Any],
+    payload: LoadControlRequest,
 ):
     """
     Evaluate whether the system can accept additional load.
     """
     try:
         return performance_service.load_control(
-            active_requests=payload.get("active_requests", 0),
-            max_concurrent_requests=payload.get(
-                "max_concurrent_requests",
-                100,
-            ),
+            active_requests=payload.active_requests,
+            max_concurrent_requests=payload.max_concurrent_requests,
         )
 
     except ValueError as exc:

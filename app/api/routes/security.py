@@ -11,6 +11,12 @@ from app.core.security import (
     transport_security,
 )
 
+from app.schemas.security import (
+    SecurityEncryptPayload,
+    SecurityDecryptPayload,
+    SecurityFieldsPayload,
+)
+
 router = APIRouter(
     prefix="/security",
     tags=["Security"],
@@ -72,21 +78,17 @@ def security_status() -> Dict[str, Any]:
 # ---------------------------------------------------------
 
 @router.post("/encryption/encrypt")
-def encrypt_data(payload: Dict[str, Any]) -> Dict[str, Any]:
+def encrypt_data(
+    payload: SecurityEncryptPayload,
+) -> Dict[str, Any]:
     """
     Encrypt plaintext using AES-GCM.
     """
-    plaintext = payload.get("plaintext")
-
-    if plaintext is None:
-        raise HTTPException(
-            status_code=422,
-            detail="plaintext is required",
-        )
+    plaintext = payload.plaintext
 
     try:
         encrypted = encryption_service.encrypt(
-            value=str(plaintext)
+            value=plaintext
         )
 
         return encrypted.to_dict()
@@ -103,23 +105,13 @@ def encrypt_data(payload: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------
 
 @router.post("/encryption/decrypt")
-def decrypt_data(payload: Dict[str, Any]) -> Dict[str, Any]:
+def decrypt_data(
+    payload: SecurityDecryptPayload,
+) -> Dict[str, Any]:
     """
     Decrypt an AES-GCM encrypted value.
     """
-    encrypted = payload.get("encrypted")
-
-    if encrypted is None:
-        raise HTTPException(
-            status_code=422,
-            detail="encrypted is required",
-        )
-
-    if not isinstance(encrypted, dict):
-        raise HTTPException(
-            status_code=422,
-            detail="encrypted must be an object",
-        )
+    encrypted = payload.encrypted
 
     try:
         plaintext = encryption_service.decrypt_text(
@@ -142,23 +134,13 @@ def decrypt_data(payload: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------
 
 @router.post("/fields/encrypt")
-def encrypt_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
+def encrypt_fields(
+    payload: SecurityFieldsPayload,
+) -> Dict[str, Any]:
     """
     Encrypt sensitive fields.
     """
-    fields = payload.get("fields")
-
-    if fields is None:
-        raise HTTPException(
-            status_code=422,
-            detail="fields is required",
-        )
-
-    if not isinstance(fields, dict):
-        raise HTTPException(
-            status_code=422,
-            detail="fields must be an object",
-        )
+    fields = payload.fields
 
     try:
         return field_encryptor.encrypt_fields(fields)
@@ -175,23 +157,13 @@ def encrypt_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
 # ---------------------------------------------------------
 
 @router.post("/fields/decrypt")
-def decrypt_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
+def decrypt_fields(
+    payload: SecurityFieldsPayload,
+) -> Dict[str, Any]:
     """
     Decrypt previously encrypted sensitive fields.
     """
-    fields = payload.get("fields")
-
-    if fields is None:
-        raise HTTPException(
-            status_code=422,
-            detail="fields is required",
-        )
-
-    if not isinstance(fields, dict):
-        raise HTTPException(
-            status_code=422,
-            detail="fields must be an object",
-        )
+    fields = payload.fields
 
     try:
         return field_encryptor.decrypt_fields(fields)

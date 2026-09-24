@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.security import incident_response_service
+from app.schemas.security import (
+    IncidentEvidenceRequest,
+    IncidentRouteCreateRequest,
+)
 
 
 router = APIRouter(
@@ -20,32 +24,28 @@ router = APIRouter(
 
 @router.post("/incidents")
 def create_incident(
-    payload: Dict[str, Any],
+    payload: IncidentRouteCreateRequest,
 ):
     """
     Create a security incident.
     """
     try:
-        title = payload.get("title") or payload.get("incident_type")
+        title = payload.title or payload.incident_type
 
         if not title:
             raise ValueError("title is required")
 
-        description = payload.get("description")
-
-        if not description:
+        if not payload.description:
             raise ValueError("description is required")
 
-        severity = payload.get("severity")
-
-        if not severity:
+        if not payload.severity:
             raise ValueError("severity is required")
 
         return incident_response_service.create_incident(
             title=title,
-            description=description,
-            severity=severity,
-            assigned_to=payload.get("assigned_to"),
+            description=payload.description,
+            severity=payload.severity,
+            assigned_to=payload.assigned_to,
         )
 
     except ValueError as exc:
@@ -270,10 +270,7 @@ def escalate_incident(
 @router.post("/incidents/{incident_id}/evidence")
 def preserve_evidence(
     incident_id: str,
-    evidence_type: str = Query(...),
-    captured_by: str = Query(...),
-    evidence: str = Query(...),
-    location_reference: Optional[str] = Query(None),
+    payload: IncidentEvidenceRequest,
 ):
     """
     Preserve incident evidence.
@@ -284,10 +281,10 @@ def preserve_evidence(
     try:
         return incident_response_service.preserve_evidence(
             incident_id=incident_id,
-            evidence_type=evidence_type,
-            evidence_bytes=evidence.encode("utf-8"),
-            captured_by=captured_by,
-            location_reference=location_reference,
+            evidence_type=payload.evidence_type,
+            evidence_bytes=payload.evidence.encode("utf-8"),
+            captured_by=payload.captured_by,
+            location_reference=payload.location_reference,
         )
 
     except KeyError as exc:

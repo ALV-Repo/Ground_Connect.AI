@@ -1,11 +1,8 @@
 from datetime import datetime, timezone
 
-from fastapi.testclient import TestClient
+from tests.test_helpers import create_authenticated_client
 
-from app.main import app
-
-
-client = TestClient(app)
+client = create_authenticated_client()
 
 
 def consent():

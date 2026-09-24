@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.schemas.messages import MessageCreateRequest
 from app.services.messaging import messaging_service
 
 
@@ -20,22 +21,25 @@ router = APIRouter(
 
 @router.post("")
 def create_message(
-    payload: Dict[str, Any],
+    payload: MessageCreateRequest,
 ):
     """
     Create a message for propagation.
     """
     try:
         return messaging_service.create_message(
-            message_id=payload.get("message_id"),
-            tenant_id=payload.get("tenant_id"),
-            subject=payload.get("subject"),
-            body=payload.get("body"),
-            created_by=payload.get("created_by"),
-            recipients=payload.get("recipients", []),
-            priority=payload.get("priority", "normal"),
-            expires_at=payload.get("expires_at"),
-            metadata=payload.get("metadata"),
+            message_id=payload.message_id,
+            tenant_id=payload.tenant_id,
+            subject=payload.subject,
+            body=payload.body,
+            created_by=payload.created_by,
+            recipients=[
+                recipient.model_dump()
+                for recipient in payload.recipients
+            ],
+            priority=payload.priority,
+            expires_at=payload.expires_at,
+            metadata=payload.metadata,
         )
 
     except ValueError as exc:

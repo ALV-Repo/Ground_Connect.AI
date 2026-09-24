@@ -14,6 +14,12 @@ class LawfulBasis(str, Enum):
     PUBLIC_FUNCTION = "public_function"
 
 
+class PrincipalDataRegisterRequest(BaseModel):
+    tenant_id: str = Field(..., min_length=1, max_length=128)
+    principal_id: str = Field(..., min_length=1, max_length=128)
+    data: Dict[str, Any] = Field(default_factory=dict)
+
+
 class PrivacyInteractionCreate(BaseModel):
     tenant_id: str = Field(..., min_length=1, max_length=128)
     principal_id: str = Field(..., min_length=1, max_length=128)

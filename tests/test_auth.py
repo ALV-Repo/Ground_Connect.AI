@@ -681,3 +681,41 @@ def test_session_status(auth_service):
     assert result["absolute_expired"] is False
     assert result["revoked"] is False
     assert result["purge_offline_data"] is False
+
+def test_otp_request_rate_limit():
+    from app.services.auth import AuthService
+
+    service = AuthService()
+
+    for _ in range(5):
+        response = service.issue_otp("+919999999999")
+        assert response is not None
+
+    with pytest.raises(PermissionError, match="OTP rate limit exceeded"):
+        service.issue_otp("+919999999999")
+
+
+def test_otp_verify_rate_limit():
+    from app.services.auth import AuthService
+
+    service = AuthService()
+
+    phone_number = "+918888888888"
+    service.issue_otp(phone_number)
+
+    for _ in range(10):
+        try:
+            service.verify_otp(
+                phone_number,
+                "000000",
+                "127.0.0.1",
+            )
+        except Exception:
+            pass
+
+    with pytest.raises(PermissionError, match="OTP rate limit exceeded"):
+        service.verify_otp(
+            phone_number,
+            "000000",
+            "127.0.0.1",
+        )

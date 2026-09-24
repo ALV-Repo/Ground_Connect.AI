@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, HTTPException, Query
 
 from app.services.tpi import tpi_service
-
+from app.schemas.tpi import TPICreateOperationRequest
 
 router = APIRouter(
     prefix="/tpi",
@@ -19,30 +19,24 @@ router = APIRouter(
 
 @router.post("/operations")
 def create_operation(
-    operation_id: str,
-    tenant_id: str,
-    requested_by: str,
-    operation_type: str,
-    payload: Optional[Dict[str, Any]] = None,
-    reason: Optional[str] = None,
-    approval_window_seconds: Optional[int] = None,
+    request: TPICreateOperationRequest,
 ):
     try:
         return tpi_service.create_operation(
-            operation_id=operation_id,
-            tenant_id=tenant_id,
-            requested_by=requested_by,
-            operation_type=operation_type,
-            payload=payload,
-            reason=reason,
-            approval_window_seconds=approval_window_seconds,
+            operation_id=request.operation_id,
+            tenant_id=request.tenant_id,
+            requested_by=request.requested_by,
+            operation_type=request.operation_type,
+            payload=request.payload,
+            reason=request.reason,
+            approval_window_seconds=request.approval_window_seconds,
         )
 
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
             detail=str(exc),
-        )
+        ) from exc
 
 
 # ============================================================

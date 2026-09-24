@@ -4,6 +4,8 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.schemas.closure import (
     ClosureConfirmationRequest,
+    ClosureIssueRegistrationRequest,
+    ClosureUnitRegistrationRequest,
     ResolutionProposalRequest,
 )
 from app.services.closure import closure_service
@@ -17,48 +19,40 @@ router = APIRouter(
 
 @router.post("/issues/register", response_model=dict)
 def register_issue(
-    issue_id: str,
-    tenant_id: str,
-    unit_id: str,
-    severity: float = 1.0,
-    corroboration_count: int = 0,
-    sla_breached: bool = False,
+    request: ClosureIssueRegistrationRequest,
 ):
     try:
         return closure_service.register_issue(
-            issue_id=issue_id,
-            tenant_id=tenant_id,
-            unit_id=unit_id,
-            severity=severity,
-            corroboration_count=corroboration_count,
-            sla_breached=sla_breached,
+            issue_id=request.issue_id,
+            tenant_id=request.tenant_id,
+            unit_id=request.unit_id,
+            severity=request.severity,
+            corroboration_count=request.corroboration_count,
+            sla_breached=request.sla_breached,
         )
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
             detail=str(exc),
-        )
+        ) from exc
 
 
 @router.post("/units/register", response_model=dict)
 def register_unit(
-    tenant_id: str,
-    unit_id: str,
-    unit_size: float,
-    intake_volume: float,
+    request: ClosureUnitRegistrationRequest,
 ):
     try:
         return closure_service.register_unit(
-            tenant_id=tenant_id,
-            unit_id=unit_id,
-            unit_size=unit_size,
-            intake_volume=intake_volume,
+            tenant_id=request.tenant_id,
+            unit_id=request.unit_id,
+            unit_size=request.unit_size,
+            intake_volume=request.intake_volume,
         )
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
             detail=str(exc),
-        )
+        ) from exc
 
 
 @router.post("/proposals", response_model=dict)
@@ -73,12 +67,12 @@ def propose_resolution(
         raise HTTPException(
             status_code=404,
             detail=str(exc),
-        )
+        ) from exc
     except PermissionError as exc:
         raise HTTPException(
             status_code=403,
             detail=str(exc),
-        )
+        ) from exc
 
 
 @router.post(
@@ -102,7 +96,7 @@ def create_confirmation_request(
         raise HTTPException(
             status_code=400,
             detail=str(exc),
-        )
+        ) from exc
 
 
 @router.post("/confirmations", response_model=dict)
@@ -117,17 +111,17 @@ def respond_to_confirmation(
         raise HTTPException(
             status_code=404,
             detail=str(exc),
-        )
+        ) from exc
     except PermissionError as exc:
         raise HTTPException(
             status_code=403,
             detail=str(exc),
-        )
+        ) from exc
     except ValueError as exc:
         raise HTTPException(
             status_code=400,
             detail=str(exc),
-        )
+        ) from exc
 
 
 @router.post(
@@ -151,7 +145,7 @@ def finalize_expired_confirmations(
         raise HTTPException(
             status_code=403,
             detail=str(exc),
-        )
+        ) from exc
 
 
 @router.get("/confirmations/{request_id}", response_model=dict)
@@ -168,12 +162,12 @@ def get_confirmation_request(
         raise HTTPException(
             status_code=404,
             detail=str(exc),
-        )
+        ) from exc
     except PermissionError as exc:
         raise HTTPException(
             status_code=403,
             detail=str(exc),
-        )
+        ) from exc
 
 
 @router.get("/metrics", response_model=dict)
@@ -199,4 +193,4 @@ def service_debt_index(
         raise HTTPException(
             status_code=404,
             detail=str(exc),
-        )
+        ) from exc

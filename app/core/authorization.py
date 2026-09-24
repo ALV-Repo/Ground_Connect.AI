@@ -344,25 +344,64 @@ class AuthorizationEngine:
             if identity.get("tenant_id") != tenant_id:
                 return []
 
-        descendants: list[Dict[str, Any]] = []
+        # Build a parent -> children index once.
+        children_by_parent: Dict[str, list[str]] = {}
 
         for candidate_id, candidate in self._identities.items():
-            if candidate_id == subject_id:
-                continue
+            parent_id = candidate.get("parent_id")
 
-            if active_only and not candidate.get("active", False):
+            if parent_id is None:
                 continue
 
             if tenant_id is not None:
                 if candidate.get("tenant_id") != tenant_id:
                     continue
 
-            if self.is_descendant(
-                ancestor_id=subject_id,
-                descendant_id=candidate_id,
-                tenant_id=tenant_id,
+            children_by_parent.setdefault(
+                parent_id,
+                [],
+            ).append(candidate_id)
+
+        # Traverse the hierarchy downward from subject_id.
+        descendants: list[Dict[str, Any]] = []
+        stack = list(
+            children_by_parent.get(subject_id, [])
+        )
+        visited: set[str] = set()
+
+        while stack:
+            candidate_id = stack.pop()
+
+            # Protect against malformed/cyclic hierarchy.
+            if candidate_id in visited:
+                continue
+
+            visited.add(candidate_id)
+
+            candidate = self._identities.get(candidate_id)
+
+            if candidate is None:
+                continue
+
+            # Preserve tenant isolation.
+            if candidate.get("tenant_id") != identity.get("tenant_id"):
+                continue
+
+            if active_only and not candidate.get(
+                "active",
+                False,
             ):
-                descendants.append(candidate.copy())
+                continue
+
+            descendants.append(candidate.copy())
+
+            # Continue traversal through this identity's children.
+            stack.extend(
+                children_by_parent.get(
+                    candidate_id,
+                    [],
+                )
+            )
 
         return descendants
 
@@ -544,7 +583,7 @@ class AuthorizationEngine:
 
             return decision
 
-        # --------------------------------------------------------
+              # --------------------------------------------------------
         # 3. Client identity is never trusted
         # --------------------------------------------------------
 
@@ -552,9 +591,32 @@ class AuthorizationEngine:
             "CLIENT_IDENTITY_NOT_TRUSTED"
         )
 
-        # Client supplied identity information must never
+        # Client-supplied identity information must never
         # override server-side identity.
+        client_identity = getattr(
+            request,
+            "client_identity",
+            None,
+        )
 
+        if client_identity:
+            decision = self._deny(
+                request=request,
+                reason="Client-supplied identity values are not trusted.",
+                failing_rule="CLIENT_IDENTITY_NOT_TRUSTED",
+                rules_evaluated=rules_evaluated,
+            )
+
+            self._record_audit(
+                request,
+                decision,
+            )
+
+            return decision
+
+        # --------------------------------------------------------
+        # 4. Tenant isolation
+        # --------------------------------------------------------
         # --------------------------------------------------------
         # 4. Tenant isolation
         # --------------------------------------------------------

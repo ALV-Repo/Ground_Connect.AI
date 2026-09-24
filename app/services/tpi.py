@@ -211,13 +211,35 @@ class TwoPersonIntegrityService:
             return dict(operation)
 
         # -----------------------------------------------------
-        # Approval requires MFA
+        # Approval requires an approver role
         # -----------------------------------------------------
 
         if not approver_role:
             raise PermissionError(
                 "Approver role is required for TPI approval"
             )
+
+        # -----------------------------------------------------
+        # PROH-06:
+        # Disabling the prohibited-attribute firewall requires
+        # Compliance approval. Org Admin alone cannot approve it.
+        # -----------------------------------------------------
+
+        if (
+            operation["operation_type"]
+            == "disable_prohibited_attribute_firewall"
+        ):
+            normalized_role = approver_role.strip().lower()
+
+            if normalized_role != "compliance":
+                raise PermissionError(
+                    "Compliance Officer approval is required "
+                    "to disable the prohibited-attribute firewall"
+                )
+
+        # -----------------------------------------------------
+        # Approval requires MFA
+        # -----------------------------------------------------
 
         if not mfa_otp:
             raise PermissionError(

@@ -1,10 +1,14 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-
 from fastapi import APIRouter, HTTPException, Query
 
 from app.core.observability import observability_service
+from app.schemas.observability import (
+    MetricIncrementRequest,
+    ObservabilityEventRequest,
+    TimingMetricRequest,
+    TraceContextRequest,
+)
 
 
 router = APIRouter(
@@ -19,29 +23,23 @@ router = APIRouter(
 
 
 @router.post("/events")
-def record_event(payload: Dict[str, Any]):
+def record_event(payload: ObservabilityEventRequest):
     """
     Record a structured observability event.
     """
 
     try:
         return observability_service.log_event(
-            event=payload.get(
-                "event",
-                payload.get("event_type", "application.event"),
-            ),
-            level=payload.get(
-                "level",
-                payload.get("severity", "INFO"),
-            ),
-            correlation_id=payload.get("correlation_id"),
-            subject_id=payload.get("subject_id"),
-            tenant_id=payload.get("tenant_id"),
-            request_id=payload.get("request_id"),
-            trace_id=payload.get("trace_id"),
-            duration_ms=payload.get("duration_ms"),
-            status_code=payload.get("status_code"),
-            metadata=payload.get("metadata"),
+            event=payload.event,
+            level=payload.level,
+            correlation_id=payload.correlation_id,
+            subject_id=payload.subject_id,
+            tenant_id=payload.tenant_id,
+            request_id=payload.request_id,
+            trace_id=payload.trace_id,
+            duration_ms=payload.duration_ms,
+            status_code=payload.status_code,
+            metadata=payload.metadata,
         )
 
     except ValueError as exc:
@@ -88,29 +86,16 @@ def get_metrics():
 
 
 @router.post("/metrics/increment")
-def increment_metric(payload: Dict[str, Any]):
+def increment_metric(payload: MetricIncrementRequest):
     """
     Increment an application counter.
     """
 
     try:
-        name = payload.get("name")
-
-        if not name:
-            raise HTTPException(
-                status_code=400,
-                detail="Metric name is required",
-            )
-
-        value = payload.get("value", 1)
-
         return observability_service.increment_counter(
-            name=name,
-            value=value,
+            name=payload.name,
+            value=payload.value,
         )
-
-    except HTTPException:
-        raise
 
     except ValueError as exc:
         raise HTTPException(
@@ -120,35 +105,16 @@ def increment_metric(payload: Dict[str, Any]):
 
 
 @router.post("/metrics/timing")
-def record_timing(payload: Dict[str, Any]):
+def record_timing(payload: TimingMetricRequest):
     """
     Record timing information for an operation.
     """
 
     try:
-        name = payload.get("name")
-
-        if not name:
-            raise HTTPException(
-                status_code=400,
-                detail="Timing metric name is required",
-            )
-
-        duration_ms = payload.get("duration_ms")
-
-        if duration_ms is None:
-            raise HTTPException(
-                status_code=400,
-                detail="duration_ms is required",
-            )
-
         return observability_service.record_timing(
-            name=name,
-            duration_ms=duration_ms,
+            name=payload.name,
+            duration_ms=payload.duration_ms,
         )
-
-    except HTTPException:
-        raise
 
     except ValueError as exc:
         raise HTTPException(
@@ -158,16 +124,18 @@ def record_timing(payload: Dict[str, Any]):
 
 
 @router.post("/traces")
-def create_trace(payload: Optional[Dict[str, Any]] = None):
+def create_trace(payload: TraceContextRequest | None = None):
     """
     Create correlation/trace/span context.
     """
 
     try:
-        payload = payload or {}
-
         return observability_service.create_trace_context(
-            correlation_id=payload.get("correlation_id"),
+            correlation_id=(
+                payload.correlation_id
+                if payload is not None
+                else None
+            ),
         )
 
     except ValueError as exc:
@@ -219,7 +187,7 @@ def siem_status():
 
 
 @router.post("/siem/forward")
-def forward_to_siem(payload: Dict[str, Any]):
+def forward_to_siem():
     """
     Forwarding readiness endpoint.
 

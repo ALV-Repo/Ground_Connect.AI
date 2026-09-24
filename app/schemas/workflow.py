@@ -95,3 +95,9 @@ class WorkflowIssueResponse(BaseModel):
     status: IssueStatus
     created_at: datetime
     status_history: List[IssueStatusResponse] = Field(default_factory=list)
+
+
+class WorkflowIssueRegistrationRequest(BaseModel):
+    tenant_id: str = Field(..., min_length=1, max_length=128)
+    category: str = Field(..., min_length=1, max_length=128)
+    priority: str = Field(..., min_length=1, max_length=32)

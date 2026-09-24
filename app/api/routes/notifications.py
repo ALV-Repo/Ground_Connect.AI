@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query
 
+from app.schemas.notifications import NotificationCreateRequest
 from app.services.notifications import notification_service
 
 
@@ -18,19 +19,24 @@ router = APIRouter(
 # ---------------------------------------------------------------------------
 
 @router.post("")
-def create_notification(payload: Dict[str, Any]):
+def create_notification(
+    payload: NotificationCreateRequest,
+):
     try:
         return notification_service.create_notification(
-            notification_id=payload.get("notification_id"),
-            tenant_id=payload.get("tenant_id"),
-            title=payload.get("title"),
-            body=payload.get("body"),
-            created_by=payload.get("created_by"),
-            recipients=payload.get("recipients", []),
-            priority=payload.get("priority", "normal"),
-            scheduled_at=payload.get("scheduled_at"),
-            expires_at=payload.get("expires_at"),
-            metadata=payload.get("metadata"),
+            notification_id=payload.notification_id,
+            tenant_id=payload.tenant_id,
+            title=payload.title,
+            body=payload.body,
+            created_by=payload.created_by,
+            recipients=[
+                recipient.model_dump()
+                for recipient in payload.recipients
+            ],
+            priority=payload.priority,
+            scheduled_at=payload.scheduled_at,
+            expires_at=payload.expires_at,
+            metadata=payload.metadata,
         )
 
     except ValueError as exc:

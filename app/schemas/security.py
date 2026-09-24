@@ -436,3 +436,77 @@ class SecurityErrorResponse(BaseModel):
     success: bool = False
 
     error: str
+
+# ============================================================
+# BE-013 — Incident Response Route Requests
+# ============================================================
+
+class IncidentRouteCreateRequest(BaseModel):
+    title: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=256,
+    )
+
+    incident_type: Optional[str] = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+    )
+
+    description: str = Field(
+        ...,
+        min_length=1,
+        max_length=10_000,
+    )
+
+    severity: str = Field(
+        ...,
+        min_length=1,
+        max_length=32,
+    )
+
+    assigned_to: Optional[str] = Field(
+        default=None,
+        max_length=128,
+    )
+
+
+class IncidentEvidenceRequest(BaseModel):
+    evidence_type: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+    )
+
+    captured_by: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+    )
+
+    evidence: str = Field(
+        ...,
+        min_length=1,
+        max_length=20_000_000,
+    )
+
+    location_reference: Optional[str] = Field(
+        default=None,
+        max_length=1000,
+    )
+
+class SecurityEncryptPayload(BaseModel):
+    plaintext: str = Field(
+        ...,
+        min_length=1,
+        max_length=10_000_000,
+    )
+
+
+class SecurityDecryptPayload(BaseModel):
+    encrypted: Dict[str, object]
+
+
+class SecurityFieldsPayload(BaseModel):
+    fields: Dict[str, object]

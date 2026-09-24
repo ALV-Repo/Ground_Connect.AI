@@ -5,6 +5,8 @@ from fastapi import (
     UploadFile,
 )
 
+from app.services.prompt_guard import validate_untrusted_ai_input
+
 from app.schemas.ai import (
     BatchSummarizeRequest,
     BatchSummarizeResponse,
@@ -88,6 +90,14 @@ def summarize(
         .lower()
     )
 
+    try:
+        validate_untrusted_ai_input(text)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="AI_ACCESS_DENIED",
+        ) from exc
+
     if content_type not in SUPPORTED_CONTENT_TYPES:
         raise HTTPException(
             status_code=422,
@@ -148,6 +158,15 @@ def summarize_batch_api(
                 "Batch text items cannot be empty."
             ),
         )
+
+    try:
+        for text in texts:
+            validate_untrusted_ai_input(text)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="AI_ACCESS_DENIED",
+        ) from exc
 
     try:
         summaries = summarize_batch(
