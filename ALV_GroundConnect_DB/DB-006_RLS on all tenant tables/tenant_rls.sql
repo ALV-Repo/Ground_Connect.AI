@@ -21,6 +21,37 @@
 --   This script does not implement authentication itself.
 -- ================================================================
 
+-- ================================================================
+-- MIGRATION / DBA OPERATIONS NOTE
+-- ================================================================
+-- This migration enables and FORCEs Row Level Security.
+--
+-- FORCE ROW LEVEL SECURITY means the table owner is also subject
+-- to the table's RLS policies.
+--
+-- Therefore, any subsequent migration, maintenance, or DBA SQL
+-- that reads/writes tenant-owned rows must establish the trusted
+-- tenant context before the statement, for example:
+--
+--     SET LOCAL app.organization_id = '<authenticated-tenant-uuid>';
+--
+-- SET LOCAL is preferred so the context is limited to the current
+-- transaction.
+--
+-- Migration/DBA roles that intentionally need to operate across
+-- tenants must either:
+--   1. execute tenant-scoped work with SET LOCAL
+--      app.organization_id, or
+--   2. use a controlled role with BYPASSRLS privilege.
+--
+-- BYPASSRLS must be restricted to explicitly authorized operational
+-- roles. Application roles must not receive BYPASSRLS merely to
+-- avoid tenant isolation.
+--
+-- A missing app.organization_id context fails closed through the
+-- RLS policies and must not be replaced with a request parameter.
+-- ================================================================
+
 CREATE SCHEMA IF NOT EXISTS app;
 
 CREATE OR REPLACE FUNCTION app.current_organization_id()

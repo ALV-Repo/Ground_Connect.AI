@@ -48,10 +48,10 @@ CREATE TABLE identity_authentication_sessions.users (
     --     FOREIGN KEY (import_batch_id)
     --     REFERENCES identity_authentication_sessions.import_batches(id),
 
-    CONSTRAINT unq_users_mobile_encrypted
+    CONSTRAINT uq_users_mobile_encrypted
         UNIQUE (mobile_encrypted),
 
-    CONSTRAINT unq_users_mobile_hash
+    CONSTRAINT uq_users_mobile_hash
         UNIQUE (mobile_hash),
 
     CONSTRAINT chk_users_preferred_language
@@ -61,7 +61,9 @@ CREATE TABLE identity_authentication_sessions.users (
                 'hi',
                 'kn',
                 'ta',
-                'te'
+                'te',
+	            'ml',  -- Malayalam
+                'mr'   -- Marathi
             )
         ),
 
@@ -135,7 +137,7 @@ CREATE TABLE identity_authentication_sessions.devices (
 	    REFERENCES identity_authentication_sessions.users(id),
 
     -- Device fingerprint must be unique
-    CONSTRAINT unq_devices_fingerprint
+    CONSTRAINT uq_devices_fingerprint
         UNIQUE (device_fingerprint),
 
     -- Platform
@@ -229,11 +231,11 @@ CREATE TABLE identity_authentication_sessions.sessions (
         REFERENCES identity_authentication_sessions.devices(id),
 
     -- Refresh token hash must be unique
-    CONSTRAINT unq_sessions_refresh_token_hash
+    CONSTRAINT uq_sessions_refresh_token_hash
         UNIQUE (refresh_token_hash),
 
     -- Access token JTI must be unique
-    CONSTRAINT unq_sessions_access_token_jti
+    CONSTRAINT uq_sessions_access_token_jti
         UNIQUE (access_token_jti),
 
     -- Valid revoke reasons

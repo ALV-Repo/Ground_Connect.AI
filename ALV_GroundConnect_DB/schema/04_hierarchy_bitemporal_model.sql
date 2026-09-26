@@ -157,6 +157,11 @@ CREATE INDEX idx_node_assignments_node_validity
     ON hierarchy_bitemporal_model.node_assignments
     (node_id, valid_from, valid_to);
 
+CREATE INDEX idx_node_assignments_current
+    ON hierarchy_bitemporal_model.node_assignments
+    (node_id, organization_id)
+    WHERE valid_to IS NULL;
+
 CREATE UNIQUE INDEX uq_node_assignments_responsible_person
     ON hierarchy_bitemporal_model.node_assignments
     (node_id, is_responsible_person)
