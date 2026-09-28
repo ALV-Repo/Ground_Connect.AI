@@ -163,6 +163,12 @@ def test_lockout_survives_restart(tmp_path, monkeypatch):
 
     service_one = AuthService()
 
+    # Clear distributed Redis state so this test is isolated.
+    service_one._redis_rate_limiter.clear(
+        "otp_verify",
+        f"{phone}:{source}",
+    )
+
     service_one.issue_otp(phone)
 
     for _ in range(5):
@@ -185,6 +191,12 @@ def test_lockout_survives_restart(tmp_path, monkeypatch):
 
     assert locked_result["verified"] is False
     assert locked_result["locked"] is True
+
+    # Cleanup distributed Redis state after the test.
+    service_one._redis_rate_limiter.clear(
+        "otp_verify",
+        f"{phone}:{source}",
+    )
 
 
 # =========================================================
@@ -686,21 +698,44 @@ def test_otp_request_rate_limit():
     from app.services.auth import AuthService
 
     service = AuthService()
+    phone_number = "+919999999999"
+
+    # Clear the distributed Redis rate-limit state for this test identity.
+    service._redis_rate_limiter.clear(
+        "otp_request",
+        phone_number,
+    )
 
     for _ in range(5):
-        response = service.issue_otp("+919999999999")
+        response = service.issue_otp(phone_number)
         assert response is not None
 
-    with pytest.raises(PermissionError, match="OTP rate limit exceeded"):
-        service.issue_otp("+919999999999")
+    with pytest.raises(
+        PermissionError,
+        match="OTP rate limit exceeded",
+    ):
+        service.issue_otp(phone_number)
+
+    # Cleanup so this test does not affect later tests.
+    service._redis_rate_limiter.clear(
+        "otp_request",
+        phone_number,
+    )
 
 
 def test_otp_verify_rate_limit():
     from app.services.auth import AuthService
 
     service = AuthService()
-
     phone_number = "+918888888888"
+    source = "127.0.0.1"
+
+    # Clear the distributed Redis rate-limit state for this test identity.
+    service._redis_rate_limiter.clear(
+        "otp_verify",
+        f"{phone_number}:{source}",
+    )
+
     service.issue_otp(phone_number)
 
     for _ in range(10):
@@ -708,14 +743,23 @@ def test_otp_verify_rate_limit():
             service.verify_otp(
                 phone_number,
                 "000000",
-                "127.0.0.1",
+                source,
             )
         except Exception:
             pass
 
-    with pytest.raises(PermissionError, match="OTP rate limit exceeded"):
+    with pytest.raises(
+        PermissionError,
+        match="OTP rate limit exceeded",
+    ):
         service.verify_otp(
             phone_number,
             "000000",
-            "127.0.0.1",
+            source,
         )
+
+    # Cleanup so this test does not affect later tests.
+    service._redis_rate_limiter.clear(
+        "otp_verify",
+        f"{phone_number}:{source}",
+    )

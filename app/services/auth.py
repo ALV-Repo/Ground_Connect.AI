@@ -5,6 +5,7 @@ import secrets
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from app.core.redis_rate_limiter import RedisRateLimiter
 
 from app.core.config import settings
 
@@ -118,6 +119,8 @@ class AuthService:
         self._otp_verify_windows: dict[str, list[float]] = {}
 
         self._verified_identities: set[str] = set()
+
+        self._redis_rate_limiter = RedisRateLimiter()
 
         # -------------------------------------------------
         # Persistent lockout state
@@ -319,12 +322,15 @@ class AuthService:
     ):
         now = time.time()
 
-        self._check_otp_rate_limit(
-            key=phone_number,
+        allowed = self._redis_rate_limiter.allow(
+            namespace="otp_request",
+            identity=phone_number,
             limit=OTP_REQUEST_LIMIT,
-            now=now,
-            windows=self._otp_request_windows,
+            window_seconds=OTP_RATE_LIMIT_WINDOW_SECONDS,
         )
+
+        if not allowed:
+            raise PermissionError("OTP rate limit exceeded")
 
         otp = self._generate_otp()
 
@@ -365,12 +371,15 @@ class AuthService:
 
         now = time.time()
 
-        self._check_otp_rate_limit(
-            key=f"{phone_number}:{source}",
+        allowed = self._redis_rate_limiter.allow(
+            namespace="otp_verify",
+            identity=f"{phone_number}:{source}",
             limit=OTP_VERIFY_LIMIT,
-            now=now,
-            windows=self._otp_verify_windows,
+            window_seconds=OTP_RATE_LIMIT_WINDOW_SECONDS,
         )
+
+        if not allowed:
+            raise PermissionError("OTP rate limit exceeded")
 
         key = self._lockout_key(
             phone_number,

@@ -47,6 +47,9 @@ class MockAIProvider(AIProvider):
         text: str,
         target_language: str,
     ) -> str:
+        """
+        Development only — replace before production.
+        """
 
         target_language = target_language.lower().strip()
 

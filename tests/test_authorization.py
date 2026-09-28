@@ -700,3 +700,279 @@ def test_permission_bypass_prompt_does_not_grant_access():
     decision = engine.authorize(request)
 
     assert decision.allowed is False
+
+def test_invalidate_subject_cache_clears_redis(monkeypatch):
+    engine = make_engine()
+
+    engine.register_identity(
+        subject_id="redis-user-001",
+        tenant_id="tenant-001",
+        branch_id="branch-001",
+        role="member",
+    )
+
+    request = AuthorizationRequest(
+        subject_id="redis-user-001",
+        tenant_id="tenant-001",
+        resource_type="message",
+        resource_id="msg-redis-001",
+        action="READ",
+        branch_id="branch-001",
+    )
+
+    first = engine.authorize(request)
+
+    assert first.allowed is True
+    assert first.cache_hit is False
+
+    second = engine.authorize(request)
+
+    assert second.allowed is True
+    assert second.cache_hit is True
+
+    deleted = engine.invalidate_subject_cache("redis-user-001")
+
+    assert deleted >= 1
+
+    third = engine.authorize(request)
+
+    assert third.allowed is True
+    assert third.cache_hit is False
+
+
+def test_invalidate_all_cache_clears_redis():
+    engine = make_engine()
+
+    engine.register_identity(
+        subject_id="redis-user-002",
+        tenant_id="tenant-001",
+        branch_id="branch-001",
+        role="member",
+    )
+
+    request = AuthorizationRequest(
+        subject_id="redis-user-002",
+        tenant_id="tenant-001",
+        resource_type="message",
+        resource_id="msg-redis-002",
+        action="READ",
+        branch_id="branch-001",
+    )
+
+    first = engine.authorize(request)
+
+    assert first.allowed is True
+    assert first.cache_hit is False
+
+    second = engine.authorize(request)
+
+    assert second.allowed is True
+    assert second.cache_hit is True
+
+    deleted = engine.invalidate_all_cache()
+
+    assert deleted >= 1
+
+    third = engine.authorize(request)
+
+    assert third.allowed is True
+    assert third.cache_hit is False
+
+
+def test_clear_clears_redis_authorization_cache():
+    engine = make_engine()
+
+    engine.register_identity(
+        subject_id="redis-user-003",
+        tenant_id="tenant-001",
+        branch_id="branch-001",
+        role="member",
+    )
+
+    request = AuthorizationRequest(
+        subject_id="redis-user-003",
+        tenant_id="tenant-001",
+        resource_type="message",
+        resource_id="msg-redis-003",
+        action="READ",
+        branch_id="branch-001",
+    )
+
+    first = engine.authorize(request)
+
+    assert first.allowed is True
+    assert first.cache_hit is False
+
+    second = engine.authorize(request)
+
+    assert second.allowed is True
+    assert second.cache_hit is True
+
+    engine.clear()
+
+    third = engine.authorize(request)
+
+    assert third.allowed is False
+    assert third.cache_hit is False
+
+def test_identity_persists_across_authorization_engine_instances():
+    from app.core.authorization import AuthorizationEngine
+
+    subject_id = "test-persist-identity"
+    tenant_id = "test-persist-tenant"
+    branch_id = "test-persist-branch"
+
+    engine = AuthorizationEngine()
+
+    try:
+        engine.register_identity(
+            subject_id=subject_id,
+            tenant_id=tenant_id,
+            branch_id=branch_id,
+            role="member",
+        )
+
+        restarted_engine = AuthorizationEngine()
+
+        persisted_identity = restarted_engine.get_identity(subject_id)
+
+        assert persisted_identity == {
+            "subject_id": subject_id,
+            "tenant_id": tenant_id,
+            "branch_id": branch_id,
+            "role": "member",
+            "active": True,
+            "parent_id": None,
+        }
+    finally:
+        engine._repository.delete_identity(subject_id)
+
+
+def test_grant_persists_across_authorization_engine_instances():
+    from app.core.authorization import AuthorizationEngine
+
+    subject_id = "test-persist-grant"
+    tenant_id = "test-persist-grant-tenant"
+    branch_id = "test-persist-grant-branch"
+
+    engine = AuthorizationEngine()
+
+    try:
+        engine.register_identity(
+            subject_id=subject_id,
+            tenant_id=tenant_id,
+            branch_id=branch_id,
+            role="member",
+        )
+
+        engine.add_grant(
+            subject_id=subject_id,
+            tenant_id=tenant_id,
+            resource_type="task",
+            resource_id="test-persist-task",
+            action="READ",
+            branch_id=branch_id,
+        )
+
+        restarted_engine = AuthorizationEngine()
+
+        grant_key = (
+            subject_id,
+            tenant_id,
+            "task",
+            "test-persist-task",
+            "READ",
+            branch_id,
+        )
+
+        assert grant_key in restarted_engine._grants
+    finally:
+        engine._repository.delete_identity(subject_id)
+
+
+def test_identity_activation_state_persists():
+    from app.core.authorization import AuthorizationEngine
+
+    subject_id = "test-persist-active"
+    tenant_id = "test-persist-active-tenant"
+
+    engine = AuthorizationEngine()
+
+    try:
+        engine.register_identity(
+            subject_id=subject_id,
+            tenant_id=tenant_id,
+            branch_id=None,
+            role="member",
+        )
+
+        engine.deactivate_identity(subject_id)
+
+        restarted_engine = AuthorizationEngine()
+
+        identity = restarted_engine.get_identity(subject_id)
+
+        assert identity is not None
+        assert identity["active"] is False
+
+        restarted_engine.activate_identity(subject_id)
+
+        second_restart = AuthorizationEngine()
+
+        identity = second_restart.get_identity(subject_id)
+
+        assert identity is not None
+        assert identity["active"] is True
+    finally:
+        engine._repository.delete_identity(subject_id)
+
+
+def test_revoke_grant_removes_persisted_grant():
+    from app.core.authorization import AuthorizationEngine
+
+    subject_id = "test-persist-revoke"
+    tenant_id = "test-persist-revoke-tenant"
+    branch_id = "test-persist-revoke-branch"
+
+    engine = AuthorizationEngine()
+
+    try:
+        engine.register_identity(
+            subject_id=subject_id,
+            tenant_id=tenant_id,
+            branch_id=branch_id,
+            role="member",
+        )
+
+        engine.add_grant(
+            subject_id=subject_id,
+            tenant_id=tenant_id,
+            resource_type="task",
+            resource_id="test-revoke-task",
+            action="READ",
+            branch_id=branch_id,
+        )
+
+        engine.revoke_grant(
+            subject_id=subject_id,
+            tenant_id=tenant_id,
+            resource_type="task",
+            resource_id="test-revoke-task",
+            action="READ",
+            branch_id=branch_id,
+        )
+
+        restarted_engine = AuthorizationEngine()
+
+        grant_key = (
+            subject_id,
+            tenant_id,
+            "task",
+            "test-revoke-task",
+            "READ",
+            branch_id,
+        )
+
+        assert grant_key not in restarted_engine._grants
+    finally:
+        engine._repository.delete_identity(subject_id)

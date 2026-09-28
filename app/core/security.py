@@ -12,6 +12,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.services.auth import auth_service
+from app.core.audit import audit_service
 from app.core.config import settings
 
 # =========================================================
@@ -588,6 +589,12 @@ class EvidenceRecord:
     captured_at: float
     captured_by: str
 
+    # Evidence provenance / trust classification.
+    capture_source: str = "camera"
+    trust_class: str = "capture_class"
+    attestation_status: str = "attested"
+    flag: str | None = None
+
     # Do not store raw sensitive evidence here.
     location_reference: str | None = None
 
@@ -822,6 +829,7 @@ class IncidentResponseService:
         evidence_bytes: bytes,
         captured_by: str,
         location_reference: str | None = None,
+        capture_source: str = "camera",
     ) -> dict[str, Any]:
 
         incident = self._get_incident_or_raise(
@@ -833,6 +841,20 @@ class IncidentResponseService:
                 "Evidence must be supplied as bytes."
             )
 
+        normalized_capture_source = (
+            self._safe_text(capture_source)
+            .strip()
+            .lower()
+        )
+
+        if normalized_capture_source not in {
+            "camera",
+            "gallery",
+        }:
+            raise IncidentError(
+                "capture_source must be either 'camera' or 'gallery'."
+            )
+
         integrity_hash = hashlib.sha256(
             evidence_bytes
         ).hexdigest()
@@ -841,6 +863,50 @@ class IncidentResponseService:
             "EVD-"
             + secrets.token_hex(8).upper()
         )
+
+        is_gallery_submission = (
+            normalized_capture_source == "gallery"
+        )
+
+        trust_class = (
+            "lower_trust"
+            if is_gallery_submission
+            else "capture_class"
+        )
+
+        attestation_status = (
+            "unattested"
+            if is_gallery_submission
+            else "attested"
+        )
+
+        evidence_flag = (
+            "EVD-01"
+            if is_gallery_submission
+            else None
+        )
+
+        # Gallery uploads remain possible, but they must never be treated
+        # as capture-class evidence. Record the prohibited classification
+        # attempt as a DENY while storing the evidence as lower-trust.
+        if is_gallery_submission:
+            audit_service.record_decision(
+                subject_id=self._safe_text(captured_by),
+                action="SUBMIT_GALLERY_EVIDENCE",
+                resource_type="incident_evidence",
+                resource_id=evidence_id,
+                allowed=False,
+                reason=(
+                    "Gallery photo cannot be treated as capture-class "
+                    "evidence; stored as lower-trust and flagged EVD-01."
+                ),
+                rules_evaluated=[
+                    "EVIDENCE_CAPTURE_SOURCE",
+                    "EVD-01",
+                ],
+                failing_rule="EVIDENCE_CAPTURE_SOURCE",
+                source="incident_response",
+            )
 
         record = EvidenceRecord(
             evidence_id=evidence_id,
@@ -853,6 +919,10 @@ class IncidentResponseService:
             captured_by=self._safe_text(
                 captured_by
             ),
+            capture_source=normalized_capture_source,
+            trust_class=trust_class,
+            attestation_status=attestation_status,
+            flag=evidence_flag,
             location_reference=(
                 self._safe_text(location_reference)
                 if location_reference

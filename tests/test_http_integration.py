@@ -59,6 +59,7 @@ def test_authenticated_request_can_access_protected_endpoint():
 
     assert protected_response.status_code == 200
 
+
 def test_cache_clear_does_not_expose_internal_error(monkeypatch):
     from app.api.routes import authorization as authorization_route
 
@@ -167,6 +168,75 @@ def test_evidence_preservation_uses_request_body():
     assert response.status_code == 200
     assert response.json()["incident_id"] == incident_id
 
+
+def test_gallery_evidence_is_lower_trust_and_unattested():
+    user_id = "gallery_evidence_http_test_user"
+    device_id = "gallery_evidence_http_test_device"
+
+    register_response = client.post(
+        "/api/v1/auth/device/register",
+        json={
+            "user_id": user_id,
+            "device_id": device_id,
+        },
+    )
+
+    assert register_response.status_code == 200
+
+    session_response = client.post(
+        "/api/v1/auth/session/create",
+        json={
+            "user_id": user_id,
+            "device_id": device_id,
+        },
+    )
+
+    assert session_response.status_code == 200
+
+    access_token = session_response.json()["access_token"]
+
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+    }
+
+    incident_response = client.post(
+        "/api/v1/incident-response/incidents",
+        headers=headers,
+        json={
+            "incident_type": "security_test",
+            "title": "Gallery evidence test",
+            "description": "Testing gallery evidence classification.",
+            "severity": "medium",
+        },
+    )
+
+    assert incident_response.status_code == 200
+
+    incident_id = incident_response.json()["incident_id"]
+
+    response = client.post(
+        f"/api/v1/incident-response/incidents/{incident_id}/evidence",
+        headers=headers,
+        json={
+            "evidence_type": "photo",
+            "captured_by": "test_user",
+            "evidence": "gallery-photo-test",
+            "location_reference": "test-location",
+            "capture_source": "gallery",
+        },
+    )
+
+    assert response.status_code == 200
+
+    evidence = response.json()
+
+    assert evidence["incident_id"] == incident_id
+    assert evidence["capture_source"] == "gallery"
+    assert evidence["trust_class"] == "lower_trust"
+    assert evidence["attestation_status"] == "unattested"
+    assert evidence["flag"] == "EVD-01"
+
+
 def test_tpi_operation_creation_uses_request_body():
     user_id = "tpi_http_test_user"
     device_id = "tpi_http_test_device"
@@ -200,6 +270,7 @@ def test_tpi_operation_creation_uses_request_body():
 
     assert response.status_code == 200
     assert response.json()["operation_id"] == "tpi-http-001"
+
 
 def test_vendor_elevation_uses_request_body_for_scopes():
     user_id = "vendor_http_test_user"

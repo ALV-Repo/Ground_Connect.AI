@@ -4,10 +4,13 @@ import time
 from typing import Any, Dict, Optional, Tuple
 
 from app.core.audit import audit_service
+from app.core.redis_cache import RedisAuthorizationCache
 from app.schemas.authorization import (
     AuthorizationDecision,
     AuthorizationRequest,
 )
+from app.core.authorization_repository import AuthorizationRepository
+
 
 
 class AuthorizationEngine:
@@ -32,22 +35,20 @@ class AuthorizationEngine:
     CACHE_TTL_SECONDS = 60
 
     def __init__(self) -> None:
-        # Server-side identity store.
-        self._identities: Dict[str, Dict[str, Any]] = {}
+        # PostgreSQL-backed authorization state.
+        self._repository = AuthorizationRepository()
 
-        # Explicit grants:
-        # (
-        #     subject_id,
-        #     tenant_id,
-        #     resource_type,
-        #     resource_id,
-        #     action,
-        #     branch_id
-        # )
+        # Server-side identity store.
+        # State is loaded from PostgreSQL so it survives process restarts.
+        self._identities: Dict[str, Dict[str, Any]] = (
+            self._repository.load_identities()
+        )
+
+        # Explicit grants.
         self._grants: Dict[
             Tuple[str, str, str, str, str, Optional[str]],
             Dict[str, Any],
-        ] = {}
+        ] = self._repository.load_grants()
 
         # Cache value:
         # (AuthorizationDecision, cached_at_timestamp)
@@ -55,6 +56,9 @@ class AuthorizationEngine:
             Tuple[Any, ...],
             Tuple[AuthorizationDecision, float],
         ] = {}
+
+        # Shared authorization decision cache.
+        self._redis_cache = RedisAuthorizationCache()
 
     # ============================================================
     # Identity Management
@@ -128,6 +132,7 @@ class AuthorizationEngine:
             "parent_id": parent_id,
         }
 
+        self._repository.save_identity(identity)
         self._identities[subject_id] = identity
 
         # Identity/role/hierarchy change invalidates cached decisions.
@@ -166,6 +171,9 @@ class AuthorizationEngine:
                 f"Identity not found: {subject_id}"
             )
 
+        updated_identity = identity.copy()
+        updated_identity["active"] = False
+        self._repository.save_identity(updated_identity)
         identity["active"] = False
 
         self.invalidate_subject_cache(subject_id)
@@ -188,6 +196,9 @@ class AuthorizationEngine:
                 f"Identity not found: {subject_id}"
             )
 
+        updated_identity = identity.copy()
+        updated_identity["active"] = True
+        self._repository.save_identity(updated_identity)
         identity["active"] = True
 
         self.invalidate_subject_cache(subject_id)
@@ -457,6 +468,7 @@ class AuthorizationEngine:
             branch_id,
         )
 
+        self._repository.save_grant(grant)
         self._grants[key] = grant
 
         # Grant change => immediate authorization
@@ -489,6 +501,14 @@ class AuthorizationEngine:
         if grant is None:
             raise KeyError("Grant not found.")
 
+        self._repository.delete_grant(
+            subject_id=subject_id,
+            tenant_id=tenant_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            action=action,
+            branch_id=branch_id,
+        )
         del self._grants[key]
 
         # Grant change => immediate authorization
@@ -512,29 +532,80 @@ class AuthorizationEngine:
         cache_key = self._cache_key(request)
 
         # --------------------------------------------------------
-        # Authorization cache lookup
+        # 1. Local authorization cache lookup
         # --------------------------------------------------------
 
         cached = self._cache.get(cache_key)
 
         if cached is not None:
             cached_decision, cached_at = cached
-
             cache_age = time.time() - cached_at
 
-            # Cache is valid for maximum 60 seconds.
             if cache_age <= self.CACHE_TTL_SECONDS:
                 return cached_decision.model_copy(
                     update={"cache_hit": True}
                 )
 
-            # TTL expired.
             del self._cache[cache_key]
+
+        # --------------------------------------------------------
+        # 2. Redis shared authorization cache lookup
+        #
+        # Redis is checked only after the local cache misses/expiring.
+        # The current server-side identity is still validated before a
+        # Redis decision can be trusted.
+        # --------------------------------------------------------
+
+        redis_cached = self._redis_cache.get(cache_key)
+
+        if redis_cached is not None:
+            try:
+                redis_decision = AuthorizationDecision.model_validate(
+                    redis_cached
+                )
+
+                # Redis has its own server-side TTL, but authorization
+                # decisions must also respect the application's cache TTL.
+                redis_cache_age = (
+                    time.time() - redis_decision.timestamp
+                )
+
+                if redis_cache_age > self.CACHE_TTL_SECONDS:
+                    self._redis_cache.delete(cache_key)
+                else:
+                    current_identity = self._identities.get(
+                        request.subject_id
+                    )
+
+                    if (
+                        current_identity is not None
+                        and current_identity.get("active", False)
+                        and current_identity.get("tenant_id")
+                        == request.tenant_id
+                        and current_identity.get("branch_id")
+                        == request.branch_id
+                    ):
+                        self._cache[cache_key] = (
+                            redis_decision,
+                            time.time(),
+                        )
+
+                        return redis_decision.model_copy(
+                            update={"cache_hit": True}
+                        )
+
+                    # Stale or no-longer-valid Redis decision.
+                    self._redis_cache.delete(cache_key)
+
+            except Exception:
+                # Ignore malformed Redis entries and continue with
+                # normal authorization evaluation.
+                self._redis_cache.delete(cache_key)
 
         rules_evaluated: list[str] = []
 
         # --------------------------------------------------------
-        # 1. Identity existence
+        # 3. Identity existence
         # --------------------------------------------------------
 
         rules_evaluated.append(
@@ -561,7 +632,7 @@ class AuthorizationEngine:
             return decision
 
         # --------------------------------------------------------
-        # 2. Identity active
+        # 4. Identity active
         # --------------------------------------------------------
 
         rules_evaluated.append(
@@ -583,16 +654,14 @@ class AuthorizationEngine:
 
             return decision
 
-              # --------------------------------------------------------
-        # 3. Client identity is never trusted
+        # --------------------------------------------------------
+        # 5. Client identity is never trusted
         # --------------------------------------------------------
 
         rules_evaluated.append(
             "CLIENT_IDENTITY_NOT_TRUSTED"
         )
 
-        # Client-supplied identity information must never
-        # override server-side identity.
         client_identity = getattr(
             request,
             "client_identity",
@@ -615,10 +684,7 @@ class AuthorizationEngine:
             return decision
 
         # --------------------------------------------------------
-        # 4. Tenant isolation
-        # --------------------------------------------------------
-        # --------------------------------------------------------
-        # 4. Tenant isolation
+        # 6. Tenant isolation
         # --------------------------------------------------------
 
         rules_evaluated.append(
@@ -645,7 +711,7 @@ class AuthorizationEngine:
             return decision
 
         # --------------------------------------------------------
-        # 5. Branch isolation
+        # 7. Branch isolation
         # --------------------------------------------------------
 
         rules_evaluated.append(
@@ -672,7 +738,7 @@ class AuthorizationEngine:
             return decision
 
         # --------------------------------------------------------
-        # 6. Role permission
+        # 8. Role permission
         # --------------------------------------------------------
 
         rules_evaluated.append(
@@ -699,6 +765,12 @@ class AuthorizationEngine:
                 time.time(),
             )
 
+            self._redis_cache.set(
+                cache_key,
+                decision.model_dump(),
+                self.CACHE_TTL_SECONDS,
+            )
+
             self._record_audit(
                 request,
                 decision,
@@ -707,7 +779,7 @@ class AuthorizationEngine:
             return decision
 
         # --------------------------------------------------------
-        # 7. Explicit grant
+        # 9. Explicit grant
         # --------------------------------------------------------
 
         rules_evaluated.append(
@@ -726,6 +798,12 @@ class AuthorizationEngine:
                 time.time(),
             )
 
+            self._redis_cache.set(
+                cache_key,
+                decision.model_dump(),
+                self.CACHE_TTL_SECONDS,
+            )
+
             self._record_audit(
                 request,
                 decision,
@@ -734,7 +812,7 @@ class AuthorizationEngine:
             return decision
 
         # --------------------------------------------------------
-        # 8. Default deny
+        # 10. Default deny
         # --------------------------------------------------------
 
         decision = self._deny(
@@ -755,6 +833,7 @@ class AuthorizationEngine:
         )
 
         return decision
+
 
     # ============================================================
     # Audit Integration
@@ -1019,7 +1098,7 @@ class AuthorizationEngine:
             timestamp=time.time(),
         )
 
-    # ============================================================
+        # ============================================================
     # Cache
     # ============================================================
 
@@ -1027,6 +1106,7 @@ class AuthorizationEngine:
         self,
         subject_id: str,
     ) -> int:
+        """Invalidate local and Redis decisions for one subject."""
 
         keys_to_delete = [
             key
@@ -1037,21 +1117,30 @@ class AuthorizationEngine:
         for key in keys_to_delete:
             del self._cache[key]
 
-        return len(keys_to_delete)
+        redis_deleted = self._redis_cache.delete_subject(
+            subject_id
+        )
+
+        return len(keys_to_delete) + redis_deleted
 
     def invalidate_all_cache(self) -> int:
+        """Invalidate all local and Redis authorization decisions."""
 
-        count = len(self._cache)
-
+        local_count = len(self._cache)
         self._cache.clear()
 
-        return count
+        redis_count = self._redis_cache.clear()
+
+        return local_count + redis_count
 
     def clear(self) -> None:
+        """Clear persisted authorization state and all cached decisions."""
 
+        self._repository.clear()
         self._identities.clear()
         self._grants.clear()
         self._cache.clear()
+        self._redis_cache.clear()
 
 
 # ================================================================

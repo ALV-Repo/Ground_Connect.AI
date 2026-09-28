@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 # BE-012 — Transport & At-rest Encryption
 # ============================================================
 
+
 class EncryptionRequest(BaseModel):
     plaintext: str = Field(
         ...,
@@ -100,6 +101,7 @@ class TLSStatusResponse(BaseModel):
 # ============================================================
 # BE-013 — Incident Response
 # ============================================================
+
 
 class IncidentCreateRequest(BaseModel):
     incident_id: str = Field(
@@ -359,6 +361,7 @@ class IncidentSearchRequest(BaseModel):
 # Pentest Gate
 # ============================================================
 
+
 class PentestGateRequest(BaseModel):
     environment: str = Field(
         default="development",
@@ -393,6 +396,7 @@ class PentestGateResponse(BaseModel):
 # ============================================================
 # Security Health / Status
 # ============================================================
+
 
 class SecurityHealthResponse(BaseModel):
     encryption_enabled: bool
@@ -437,9 +441,11 @@ class SecurityErrorResponse(BaseModel):
 
     error: str
 
+
 # ============================================================
 # BE-013 — Incident Response Route Requests
 # ============================================================
+
 
 class IncidentRouteCreateRequest(BaseModel):
     title: Optional[str] = Field(
@@ -495,6 +501,20 @@ class IncidentEvidenceRequest(BaseModel):
         default=None,
         max_length=1000,
     )
+
+    # Source of the submitted evidence.
+    #
+    # camera  -> trusted capture-class evidence
+    # gallery -> lower-trust evidence; service marks EVD-01
+    #
+    # Default is kept as "camera" for backward compatibility
+    # with existing clients/tests that do not yet send this field.
+    capture_source: str = Field(
+        default="camera",
+        min_length=1,
+        max_length=32,
+    )
+
 
 class SecurityEncryptPayload(BaseModel):
     plaintext: str = Field(

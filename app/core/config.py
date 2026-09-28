@@ -41,6 +41,19 @@ class Settings(BaseSettings):
     )
 
     # ---------------------------------------------------------
+    # Redis / Distributed Authorization Cache
+    # ---------------------------------------------------------
+    redis_url: str = "redis://localhost:6379/0"
+    redis_enabled: bool = True
+    redis_key_prefix: str = "groundconnect"
+
+    # ---------------------------------------------------------
+    # PostgreSQL / Authorization State Persistence
+    # ---------------------------------------------------------
+    database_url: str | None = None
+    database_enabled: bool = False
+
+    # ---------------------------------------------------------
     # BE-004: Audit / ADR
     # ---------------------------------------------------------
     audit_enabled: bool = True

@@ -285,6 +285,7 @@ def preserve_evidence(
             evidence_bytes=payload.evidence.encode("utf-8"),
             captured_by=payload.captured_by,
             location_reference=payload.location_reference,
+            capture_source=payload.capture_source,
         )
 
     except KeyError as exc:
