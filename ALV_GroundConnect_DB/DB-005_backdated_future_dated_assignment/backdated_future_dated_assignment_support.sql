@@ -516,6 +516,91 @@ JOIN hierarchy_bitemporal_model_v2.node_assignments AS na
   ON na.id = aaa.assignment_id;
 
 
+
+/*
+===============================================================================
+POINT-IN-TIME LOOKUP EXAMPLES
+===============================================================================
+
+These examples demonstrate how to query assignment state at a specific point
+in time without modifying historical records.
+===============================================================================
+*/
+
+/*
+1. CURRENT STATE LOOKUP
+-----------------------
+Find the assignment currently valid for a node.
+*/
+-- SELECT
+--     na.id AS assignment_id,
+--     na.organization_id,
+--     na.node_id,
+--     na.parent_node_id,
+--     na.valid_from,
+--     na.valid_to
+-- FROM hierarchy_bitemporal_model_v2.node_assignments AS na
+-- WHERE na.organization_id = :organization_id
+--   AND na.node_id = :node_id
+--   AND na.valid_from <= CURRENT_TIMESTAMP
+--   AND (
+--         na.valid_to IS NULL
+--         OR CURRENT_TIMESTAMP < na.valid_to
+--       )
+-- ORDER BY na.valid_from DESC
+-- LIMIT 1;
+
+
+/*
+2. PAST TIMESTAMP LOOKUP
+------------------------
+Find the assignment that was valid at a historical timestamp.
+*/
+-- SELECT
+--     na.id AS assignment_id,
+--     na.organization_id,
+--     na.node_id,
+--     na.parent_node_id,
+--     na.valid_from,
+--     na.valid_to
+-- FROM hierarchy_bitemporal_model_v2.node_assignments AS na
+-- WHERE na.organization_id = :organization_id
+--   AND na.node_id = :node_id
+--   AND na.valid_from <= TIMESTAMPTZ '2026-08-15 10:00:00+00'
+--   AND (
+--         na.valid_to IS NULL
+--         OR TIMESTAMPTZ '2026-08-15 10:00:00+00' < na.valid_to
+--       )
+-- ORDER BY na.valid_from DESC
+-- LIMIT 1;
+
+
+/*
+3. FUTURE-DATED ASSIGNMENT LOOKUP
+---------------------------------
+Find the assignment that will become effective at a future timestamp.
+*/
+-- SELECT
+--     na.id AS assignment_id,
+--     na.organization_id,
+--     na.node_id,
+--     na.parent_node_id,
+--     na.valid_from,
+--     na.valid_to
+-- FROM hierarchy_bitemporal_model_v2.node_assignments AS na
+-- WHERE na.organization_id = :organization_id
+--   AND na.node_id = :node_id
+--   AND na.valid_from <= TIMESTAMPTZ '2026-12-01 00:00:00+00'
+--   AND (
+--         na.valid_to IS NULL
+--         OR TIMESTAMPTZ '2026-12-01 00:00:00+00' < na.valid_to
+--       )
+-- ORDER BY na.valid_from DESC
+-- LIMIT 1;
+
+
+
+
 /*
 ===============================================================================
 10. VALIDATION QUERIES
