@@ -697,7 +697,7 @@ CREATE INDEX idx_transfers_bulk_batch_id
     ON hierarchy_bitemporal_model.transfers (bulk_batch_id);
 
 
--- CRATING TABLE DELEGATIONS
+-- CREATING TABLE DELEGATIONS
 
 CREATE TABLE delegation.delegations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
