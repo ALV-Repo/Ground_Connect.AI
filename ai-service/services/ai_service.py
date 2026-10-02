@@ -15,11 +15,21 @@ class HumanConfirmationRequiredError(Exception):
 
 class AIService:
 
-    def __init__(self):
-        self.gateway = AIGateway()
-        self.permission_service = PermissionService()
-        self.memory_service = ConversationMemoryService()
-        self.audit_service = AuditService()
+    def __init__(
+        self,
+        gateway: AIGateway | None = None,
+        permission_service: PermissionService | None = None,
+        memory_service: ConversationMemoryService | None = None,
+        audit_service: AuditService | None = None,
+    ):
+        self.gateway = gateway or AIGateway()
+        self.permission_service = (
+            permission_service or PermissionService()
+        )
+        self.memory_service = (
+            memory_service or ConversationMemoryService()
+        )
+        self.audit_service = audit_service or AuditService()
 
     async def generate(
         self,

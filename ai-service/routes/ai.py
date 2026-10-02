@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+
+from core.security import verify_token
 
 from models.ai import (
     AIRequest,
@@ -25,7 +27,10 @@ from models.ai import (
     DarkUnitRadarResponse,
 )
 
-from security.permissions import PermissionDeniedError
+from security.permissions import (
+    PermissionDeniedError,
+    UserContext,
+)
 
 from services.ai_service import AIService
 from services.copilot_service import CopilotService
@@ -45,16 +50,61 @@ router = APIRouter(
 )
 
 
-ai_service = AIService()
-copilot_service = CopilotService()
-leader_briefing_service = LeaderBriefingService()
-summarization_service = SummarizationService()
-translation_service = TranslationService()
-transcription_service = TranscriptionService()
-issue_classification_service = IssueClassificationService()
-clustering_service = ClusteringSuggestionService()
-ground_analytics_service = GroundAnalyticsService()
-dark_unit_radar_service = DarkUnitRadarService()
+def apply_authenticated_identity(
+    request,
+    current_user: UserContext,
+):
+    """
+    Replace identity fields supplied by the request body
+    with the authenticated identity from the JWT.
+    """
+    return request.model_copy(
+        update={
+            "user_id": current_user.user_id,
+            "user_role": current_user.role,
+            "organization_id": current_user.organization_id,
+        }
+    )
+
+
+def get_ai_service() -> AIService:
+    return AIService()
+
+
+def get_copilot_service() -> CopilotService:
+    return CopilotService()
+
+
+def get_leader_briefing_service() -> LeaderBriefingService:
+    return LeaderBriefingService()
+
+
+def get_summarization_service() -> SummarizationService:
+    return SummarizationService()
+
+
+def get_translation_service() -> TranslationService:
+    return TranslationService()
+
+
+def get_transcription_service() -> TranscriptionService:
+    return TranscriptionService()
+
+
+def get_issue_classification_service() -> IssueClassificationService:
+    return IssueClassificationService()
+
+
+def get_clustering_service() -> ClusteringSuggestionService:
+    return ClusteringSuggestionService()
+
+
+def get_ground_analytics_service() -> GroundAnalyticsService:
+    return GroundAnalyticsService()
+
+
+def get_dark_unit_radar_service() -> DarkUnitRadarService:
+    return DarkUnitRadarService()
 
 
 # ============================================================
@@ -68,7 +118,14 @@ dark_unit_radar_service = DarkUnitRadarService()
 )
 async def generate_ai_response(
     request: AIRequest,
+    current_user: UserContext = Depends(verify_token),
+    ai_service: AIService = Depends(get_ai_service),
 ):
+    request = apply_authenticated_identity(
+        request,
+        current_user,
+    )
+
     try:
         return await ai_service.generate(request)
 
@@ -102,7 +159,14 @@ async def generate_ai_response(
 )
 async def ask_copilot(
     request: CopilotRequest,
+    current_user: UserContext = Depends(verify_token),
+    copilot_service: CopilotService = Depends(get_copilot_service),
 ):
+    request = apply_authenticated_identity(
+        request,
+        current_user,
+    )
+
     try:
         return await copilot_service.ask(request)
 
@@ -136,7 +200,16 @@ async def ask_copilot(
 )
 async def generate_leader_briefing(
     request: LeaderBriefingRequest,
+    current_user: UserContext = Depends(verify_token),
+    leader_briefing_service: LeaderBriefingService = Depends(
+        get_leader_briefing_service
+    ),
 ):
+    request = apply_authenticated_identity(
+        request,
+        current_user,
+    )
+
     try:
         return await leader_briefing_service.generate(request)
 
@@ -170,7 +243,16 @@ async def generate_leader_briefing(
 )
 async def summarize_content(
     request: SummarizationRequest,
+    current_user: UserContext = Depends(verify_token),
+    summarization_service: SummarizationService = Depends(
+        get_summarization_service
+    ),
 ):
+    request = apply_authenticated_identity(
+        request,
+        current_user,
+    )
+
     try:
         return await summarization_service.summarize(request)
 
@@ -204,7 +286,16 @@ async def summarize_content(
 )
 async def translate_text(
     request: TranslationRequest,
+    current_user: UserContext = Depends(verify_token),
+    translation_service: TranslationService = Depends(
+        get_translation_service
+    ),
 ):
+    request = apply_authenticated_identity(
+        request,
+        current_user,
+    )
+
     try:
         return await translation_service.translate(request)
 
@@ -238,7 +329,16 @@ async def translate_text(
 )
 async def transcribe_audio(
     request: TranscriptionRequest,
+    current_user: UserContext = Depends(verify_token),
+    transcription_service: TranscriptionService = Depends(
+        get_transcription_service
+    ),
 ):
+    request = apply_authenticated_identity(
+        request,
+        current_user,
+    )
+
     try:
         return await transcription_service.transcribe(request)
 
@@ -273,7 +373,16 @@ async def transcribe_audio(
 )
 async def classify_issue(
     request: IssueClassificationRequest,
+    current_user: UserContext = Depends(verify_token),
+    issue_classification_service: IssueClassificationService = Depends(
+        get_issue_classification_service
+    ),
 ):
+    request = apply_authenticated_identity(
+        request,
+        current_user,
+    )
+
     try:
         return await issue_classification_service.classify(request)
 
@@ -302,9 +411,20 @@ async def classify_issue(
 )
 async def record_issue_classification_correction(
     request: IssueClassificationCorrectionRequest,
+    current_user: UserContext = Depends(verify_token),
+    issue_classification_service: IssueClassificationService = Depends(
+        get_issue_classification_service
+    ),
 ):
+    request = apply_authenticated_identity(
+        request,
+        current_user,
+    )
+
     try:
-        return issue_classification_service.record_correction(request)
+        return issue_classification_service.record_correction(
+            request
+        )
 
     except PermissionDeniedError as exc:
         raise HTTPException(
@@ -337,7 +457,16 @@ async def record_issue_classification_correction(
 )
 async def suggest_clusters(
     request: ClusteringSuggestionRequest,
+    current_user: UserContext = Depends(verify_token),
+    clustering_service: ClusteringSuggestionService = Depends(
+        get_clustering_service
+    ),
 ):
+    request = apply_authenticated_identity(
+        request,
+        current_user,
+    )
+
     try:
         return await clustering_service.suggest_clusters(request)
 
@@ -372,7 +501,16 @@ async def suggest_clusters(
 )
 async def analyze_ground_intelligence(
     request: GroundAnalyticsRequest,
+    current_user: UserContext = Depends(verify_token),
+    ground_analytics_service: GroundAnalyticsService = Depends(
+        get_ground_analytics_service
+    ),
 ):
+    request = apply_authenticated_identity(
+        request,
+        current_user,
+    )
+
     try:
         return await ground_analytics_service.analyze(request)
 
@@ -393,10 +531,13 @@ async def analyze_ground_intelligence(
             status_code=500,
             detail="AI ground analytics request failed",
         ) from exc
+
+
 # ============================================================
 # AI-019
 # Dark Unit Radar
 # ============================================================
+
 
 @router.post(
     "/dark-unit-radar",
@@ -404,7 +545,16 @@ async def analyze_ground_intelligence(
 )
 async def analyze_dark_units(
     request: DarkUnitRadarRequest,
+    current_user: UserContext = Depends(verify_token),
+    dark_unit_radar_service: DarkUnitRadarService = Depends(
+        get_dark_unit_radar_service
+    ),
 ):
+    request = apply_authenticated_identity(
+        request,
+        current_user,
+    )
+
     try:
         return await dark_unit_radar_service.analyze(request)
 

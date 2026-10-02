@@ -14,9 +14,15 @@ from security.permissions import (
 
 class GroundAnalyticsService:
 
-    def __init__(self):
-        self.gateway = AIGateway()
-        self.permission_service = PermissionService()
+    def __init__(
+        self,
+        gateway: AIGateway | None = None,
+        permission_service: PermissionService | None = None,
+    ):
+        self.gateway = gateway or AIGateway()
+        self.permission_service = (
+            permission_service or PermissionService()
+        )
 
     async def analyze(
         self,

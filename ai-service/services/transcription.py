@@ -44,9 +44,15 @@ class TranscriptionService:
         "or": "odia",
     }
 
-    def __init__(self):
-        self.gateway = AIGateway()
-        self.permission_service = PermissionService()
+    def __init__(
+        self,
+        gateway: AIGateway | None = None,
+        permission_service: PermissionService | None = None,
+    ):
+        self.gateway = gateway or AIGateway()
+        self.permission_service = (
+            permission_service or PermissionService()
+        )
 
     def _normalize_language(self, language: str) -> str:
         normalized = language.strip().lower()

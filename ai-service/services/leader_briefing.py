@@ -14,9 +14,15 @@ from security.permissions import (
 
 class LeaderBriefingService:
 
-    def __init__(self):
-        self.gateway = AIGateway()
-        self.permission_service = PermissionService()
+    def __init__(
+        self,
+        gateway: AIGateway | None = None,
+        permission_service: PermissionService | None = None,
+    ):
+        self.gateway = gateway or AIGateway()
+        self.permission_service = (
+            permission_service or PermissionService()
+        )
 
     async def generate(
         self,
@@ -30,17 +36,21 @@ class LeaderBriefingService:
         )
 
         # AI-002:
+        # Enforce role-based access for Leader Briefing.
+        self.permission_service.enforce_feature_access(
+            user=user,
+            feature="leader_briefing",
+        )
+
+        # AI-002:
         # Enforce organization-level access before
         # processing leadership data.
-        try:
-            self.permission_service.enforce_access(
-                user=user,
-                resource_organization_id=(
-                    request.resource_organization_id
-                ),
-            )
-        except PermissionDeniedError:
-            raise
+        self.permission_service.enforce_access(
+            user=user,
+            resource_organization_id=(
+                request.resource_organization_id
+            ),
+        )
 
         # AI-003:
         # The central AI Gateway performs prompt-injection
@@ -72,44 +82,22 @@ class LeaderBriefingService:
             model=request.model,
         )
 
-        # AI-007:
-        # Explicitly disclose the coverage of the briefing.
-        coverage = (
-            "Briefing is based only on the context supplied "
-            "for the requested briefing date."
-        )
-
-        # AI-007:
-        # Explicitly disclose freshness.
-        freshness = (
-            "Information reflects the context available at "
-            + datetime.now(timezone.utc).isoformat()
-            + " UTC."
-        )
-
-        # AI-008:
-        # The current mock gateway does not produce structured
-        # categories, so do not invent facts, inferences, or
-        # recommendations.
-        facts = []
-        inferences = []
-        recommendations = []
-
-        # If prompt injection was detected, the generated
-        # content must not be treated as a normal briefing.
-        if response.prompt_injection_detected:
-            summary = response.content
-        else:
-            summary = response.content
+        now = datetime.now(timezone.utc)
 
         return LeaderBriefingResponse(
             briefing_date=request.briefing_date,
-            summary=summary,
-            facts=facts,
-            inferences=inferences,
-            recommendations=recommendations,
-            coverage=coverage,
-            freshness=freshness,
+            summary=response.content,
+            facts=[],
+            inferences=[],
+            recommendations=[],
+            coverage=(
+                "Coverage is based on the context supplied "
+                "for this briefing."
+            ),
+            freshness=(
+                "Information reflects the context available at "
+                f"{now.isoformat()} UTC."
+            ),
             provider=response.provider,
             model=response.model,
             pii_masked=response.pii_masked,

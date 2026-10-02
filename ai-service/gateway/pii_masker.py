@@ -19,6 +19,12 @@ class PIIMasker:
         "aadhaar": re.compile(
             r"(?<!\d)\d{4}[-\s]?\d{4}[-\s]?\d{4}(?!\d)"
         ),
+
+        "aadhaar_context": re.compile(
+            r"(?i)\b(?:aadhaar|aadhar|uid)\b"
+            r".{0,40}?"
+            r"(?P<number>\d{4}[-\s]?\d{4}[-\s]?\d{4})"
+        ),
     }
 
     def mask(self, text: str) -> str:
@@ -37,23 +43,11 @@ class PIIMasker:
             masked_text,
         )
 
-        masked_text = self.PATTERNS["aadhaar"].sub(
+        # Aadhaar numbers are masked only when Aadhaar-related
+        # context appears immediately before the number.
+        masked_text = self.PATTERNS["aadhaar_context"].sub(
             "[AADHAAR_REDACTED]",
             masked_text,
         )
 
         return masked_text
-if __name__ == "__main__":
-    masker = PIIMasker()
-
-    test_text = (
-        "Citizen Ravi can be contacted at "
-        "ravi@example.com or 9876543210. "
-        "Aadhaar: 1234 5678 9012."
-    )
-
-    print("Original:")
-    print(test_text)
-
-    print("\nMasked:")
-    print(masker.mask(test_text))

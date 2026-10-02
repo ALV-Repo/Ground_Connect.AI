@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from gateway.gateway import AIGateway
 from models.ai import CopilotRequest, CopilotResponse
 from security.permissions import (
-    PermissionDeniedError,
     PermissionService,
     UserContext,
 )
@@ -12,10 +11,19 @@ from services.memory import ConversationMemoryService
 
 class CopilotService:
 
-    def __init__(self):
-        self.gateway = AIGateway()
-        self.permission_service = PermissionService()
-        self.memory_service = ConversationMemoryService()
+    def __init__(
+        self,
+        gateway: AIGateway | None = None,
+        permission_service: PermissionService | None = None,
+        memory_service: ConversationMemoryService | None = None,
+    ):
+        self.gateway = gateway or AIGateway()
+        self.permission_service = (
+            permission_service or PermissionService()
+        )
+        self.memory_service = (
+            memory_service or ConversationMemoryService()
+        )
 
     async def ask(
         self,
@@ -29,16 +37,20 @@ class CopilotService:
         )
 
         # AI-002:
+        # Enforce role-based access for Leadership Copilot.
+        self.permission_service.enforce_feature_access(
+            user=user,
+            feature="copilot",
+        )
+
+        # AI-002:
         # Enforce organization-level access.
-        try:
-            self.permission_service.enforce_access(
-                user=user,
-                resource_organization_id=(
-                    request.resource_organization_id
-                ),
-            )
-        except PermissionDeniedError:
-            raise
+        self.permission_service.enforce_access(
+            user=user,
+            resource_organization_id=(
+                request.resource_organization_id
+            ),
+        )
 
         # AI-004:
         # Retrieve conversation context only for:

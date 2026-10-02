@@ -1,7 +1,12 @@
 import pytest
+import jwt
+import redis
+
 from fastapi.testclient import TestClient
+from gateway.providers import ProviderRegistry
 
 from core.audit import AuditService
+from core.config import settings
 from gateway.gateway import AIGateway
 from gateway.pii_masker import PIIMasker
 from main import app
@@ -12,11 +17,21 @@ from models.ai import (
     CopilotRequest,
     CopilotResponse,
     LeaderBriefingRequest,
+    LeaderBriefingResponse,
     SummarizationRequest,
+    SummarizationResponse,
+    TranslationRequest,
+    TranslationResponse,
+    TranscriptionRequest,
+    TranscriptionResponse,
     IssueClassificationRequest,
+    IssueClassificationResponse,
     IssueClassificationCorrectionRequest,
+    IssueClassificationCorrectionResponse,
     ClusteringSuggestionRequest,
+    ClusteringSuggestionResponse,
     GroundAnalyticsRequest,
+    GroundAnalyticsResponse,
     DarkUnitRadarRequest,
     DarkUnitRadarResponse,
 )
@@ -47,6 +62,57 @@ from services.summarization import SummarizationService
 
 
 client = TestClient(app)
+
+
+# ============================================================
+# Redis test isolation
+# ============================================================
+
+@pytest.fixture(autouse=True)
+def clear_test_redis():
+    """
+    Keep Redis-backed conversation memory isolated between tests.
+
+    Production Redis persistence is preserved. This fixture only
+    clears the dedicated local test Redis database before and after
+    each test.
+    """
+    redis_client = redis.Redis.from_url(
+        settings.redis_url,
+        decode_responses=True,
+    )
+
+    redis_client.flushdb()
+
+    yield
+
+    redis_client.flushdb()
+
+
+# ============================================================
+# Authentication helper
+# ============================================================
+
+
+def auth_headers(
+    user_id,
+    role,
+    organization_id,
+):
+    token = jwt.encode(
+        {
+            "user_id": user_id,
+            "role": role,
+            "organization_id": organization_id,
+        },
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+
+    return {
+        "Authorization": f"Bearer {token}",
+    }
+
 
 ai_service = AIService()
 summarization_service = SummarizationService()
@@ -273,6 +339,11 @@ def test_api_blocks_prompt_injection():
     response = client.post(
         "/api/v1/ai/generate",
         json=payload,
+        headers=auth_headers(
+            payload["user_id"],
+            payload["user_role"],
+            payload["organization_id"],
+        ),
     )
 
     assert response.status_code == 200
@@ -1080,9 +1151,25 @@ async def test_summarization_denies_cross_organization_access():
 async def test_provider_failure_uses_deterministic_fallback():
     gateway = AIGateway()
 
+    provider_class = (
+        gateway.provider_registry._providers["mock"].__class__
+    )
+
+    gateway.provider_registry._providers["failing-mock"] = (
+        provider_class(
+            name="failing-mock",
+            model="failing-model",
+            enabled=True,
+        )
+    )
+
+    gateway.provider_registry._approved_providers.add(
+        "failing-mock"
+    )
+
     response = await gateway.generate(
         prompt="Test provider failure",
-        provider="unavailable-provider",
+        provider="failing-mock",
     )
 
     assert response.fallback_used is True
@@ -1096,9 +1183,25 @@ async def test_provider_failure_uses_deterministic_fallback():
 async def test_fallback_preserves_pii_masking():
     gateway = AIGateway()
 
+    provider_class = (
+        gateway.provider_registry._providers["mock"].__class__
+    )
+
+    gateway.provider_registry._providers["failing-mock"] = (
+        provider_class(
+            name="failing-mock",
+            model="failing-model",
+            enabled=True,
+        )
+    )
+
+    gateway.provider_registry._approved_providers.add(
+        "failing-mock"
+    )
+
     response = await gateway.generate(
         prompt="Contact user at test@example.com",
-        provider="unavailable-provider",
+        provider="failing-mock",
     )
 
     assert response.fallback_used is True
@@ -1238,6 +1341,8 @@ def test_issue_classification_correction_denies_cross_organization_access():
 
     with pytest.raises(PermissionDeniedError):
         issue_classification_service.record_correction(request)
+
+
 # ============================================================
 # AI-017: AI-Assisted Clustering Suggestion Tests
 # ============================================================
@@ -1333,6 +1438,11 @@ def test_clustering_suggestion_api_endpoint():
     response = client.post(
         "/api/v1/ai/clustering/suggest",
         json=payload,
+        headers=auth_headers(
+            payload["user_id"],
+            payload["user_role"],
+            payload["organization_id"],
+        ),
     )
 
     assert response.status_code == 200
@@ -1343,6 +1453,8 @@ def test_clustering_suggestion_api_endpoint():
     assert data["confidence"] == 0.0
     assert data["needs_human_review"] is True
     assert data["prompt_injection_detected"] is False
+
+
 # ============================================================
 # AI-018: Ground-Intelligence Analytics Tests
 # ============================================================
@@ -1447,6 +1559,11 @@ def test_ground_analytics_api_endpoint():
     response = client.post(
         "/api/v1/ai/ground-analytics",
         json=payload,
+        headers=auth_headers(
+            payload["user_id"],
+            payload["user_role"],
+            payload["organization_id"],
+        ),
     )
 
     assert response.status_code == 200
@@ -1460,6 +1577,8 @@ def test_ground_analytics_api_endpoint():
     assert "freshness" in body
     assert "provider" in body
     assert "model" in body
+
+
 # ============================================================
 # AI-019: Dark Unit Radar Tests
 # ============================================================
@@ -1562,6 +1681,11 @@ def test_dark_unit_radar_api_endpoint():
     response = client.post(
         "/api/v1/ai/dark-unit-radar",
         json=payload,
+        headers=auth_headers(
+            payload["user_id"],
+            payload["user_role"],
+            payload["organization_id"],
+        ),
     )
 
     assert response.status_code == 200
@@ -1573,6 +1697,8 @@ def test_dark_unit_radar_api_endpoint():
     assert "freshness" in body
     assert "provider" in body
     assert "model" in body
+
+
 # ============================================================
 # AI-020: AI Cost Metering & Multi-Provider Routing
 # ============================================================
@@ -1652,6 +1778,19 @@ async def test_ai_gateway_supports_indian_language_metadata():
 
 
 @pytest.mark.asyncio
+async def test_ai_gateway_marks_unknown_language_not_evaluation_eligible():
+    gateway = AIGateway()
+
+    response = await gateway.generate(
+        "Test request",
+        language="unknown",
+    )
+
+    assert response.language == "unknown"
+    assert response.evaluation_eligible is False
+
+
+@pytest.mark.asyncio
 async def test_ai_gateway_marks_unsupported_language_for_evaluation():
     gateway = AIGateway()
 
@@ -1662,3 +1801,136 @@ async def test_ai_gateway_marks_unsupported_language_for_evaluation():
 
     assert response.language == "unknown-language"
     assert response.evaluation_eligible is False
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_success(monkeypatch):
+    class FakeUsage:
+        input_tokens = 12
+        output_tokens = 8
+
+    class FakeTextBlock:
+        type = "text"
+        text = "Anthropic test response"
+
+    class FakeResponse:
+        content = [FakeTextBlock()]
+        usage = FakeUsage()
+
+    class FakeMessages:
+        async def create(self, **kwargs):
+            assert kwargs["model"] == "claude-3-5-sonnet-latest"
+            assert kwargs["max_tokens"] == 1024
+            assert kwargs["messages"][0]["role"] == "user"
+            assert kwargs["messages"][0]["content"] == "Test prompt"
+
+            return FakeResponse()
+
+    class FakeAnthropicClient:
+        def __init__(self, **kwargs):
+            assert kwargs["api_key"] == "test-anthropic-key"
+            self.messages = FakeMessages()
+
+    monkeypatch.setattr(
+        "gateway.providers.anthropic.AsyncAnthropic",
+        FakeAnthropicClient,
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "anthropic_api_key",
+        "test-anthropic-key",
+    )
+
+    registry = ProviderRegistry({"anthropic"})
+
+    content, input_tokens, output_tokens = (
+        await registry.generate(
+            provider="anthropic",
+            prompt="Test prompt",
+        )
+    )
+
+    assert content == "Anthropic test response"
+    assert input_tokens == 12
+    assert output_tokens == 8
+
+
+def test_anthropic_provider_is_disabled_without_api_key(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        settings,
+        "anthropic_api_key",
+        None,
+    )
+
+    registry = ProviderRegistry({"anthropic"})
+
+    with pytest.raises(ValueError) as exc_info:
+        registry.get_provider("anthropic")
+
+    assert str(exc_info.value) == (
+        "AI provider 'anthropic' is disabled"
+    )
+
+
+@pytest.mark.asyncio
+async def test_anthropic_provider_retries_twice_before_success(
+    monkeypatch,
+):
+    attempts = 0
+
+    class FakeUsage:
+        input_tokens = 10
+        output_tokens = 5
+
+    class FakeTextBlock:
+        type = "text"
+        text = "Successful response after retry"
+
+    class FakeResponse:
+        content = [FakeTextBlock()]
+        usage = FakeUsage()
+
+    class FakeMessages:
+        async def create(self, **kwargs):
+            nonlocal attempts
+
+            attempts += 1
+
+            if attempts < 3:
+                raise RuntimeError(
+                    "Temporary Anthropic failure"
+                )
+
+            return FakeResponse()
+
+    class FakeAnthropicClient:
+        def __init__(self, **kwargs):
+            self.messages = FakeMessages()
+
+    monkeypatch.setattr(
+        "gateway.providers.anthropic.AsyncAnthropic",
+        FakeAnthropicClient,
+    )
+
+    monkeypatch.setattr(
+        settings,
+        "anthropic_api_key",
+        "test-anthropic-key",
+    )
+
+    registry = ProviderRegistry({"anthropic"})
+
+    content, input_tokens, output_tokens = (
+        await registry.generate(
+            provider="anthropic",
+            prompt="Retry test",
+        )
+    )
+
+    assert attempts == 3
+    assert content == "Successful response after retry"
+    assert input_tokens == 10
+    assert output_tokens == 5

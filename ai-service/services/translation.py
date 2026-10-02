@@ -44,9 +44,15 @@ class TranslationService:
         "or": "odia",
     }
 
-    def __init__(self):
-        self.gateway = AIGateway()
-        self.permission_service = PermissionService()
+    def __init__(
+        self,
+        gateway: AIGateway | None = None,
+        permission_service: PermissionService | None = None,
+    ):
+        self.gateway = gateway or AIGateway()
+        self.permission_service = (
+            permission_service or PermissionService()
+        )
 
     def _normalize_language(self, language: str) -> str:
         normalized = language.strip().lower()
@@ -99,6 +105,11 @@ class TranslationService:
 
         if source_language == target_language:
             translated_text = request.text
+            pii_masked = False
+            prompt_injection_detected = False
+            provider = request.provider or "mock"
+            model = request.model or "mock-model"
+
         else:
             translation_prompt = (
                 "You are the GroundConnect multilingual "
@@ -129,13 +140,6 @@ class TranslationService:
             )
 
             translated_text = response.content
-
-        if source_language == target_language:
-            pii_masked = False
-            prompt_injection_detected = False
-            provider = request.provider or "mock"
-            model = request.model or "mock-model"
-        else:
             pii_masked = response.pii_masked
             prompt_injection_detected = (
                 response.prompt_injection_detected

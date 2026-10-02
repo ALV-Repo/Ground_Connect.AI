@@ -2,7 +2,10 @@ from dataclasses import dataclass
 
 from core.config import settings
 from gateway.pii_masker import PIIMasker
-from gateway.providers import ProviderRegistry
+from gateway.providers import (
+    AIProviderError,
+    ProviderRegistry,
+)
 from security.prompt_security import PromptSecurityService
 from services.cost_metering import (
     AICostMeter,
@@ -26,7 +29,7 @@ class AIResponse:
 
     # AI-021: evaluation/language coverage metadata
     language: str = "unknown"
-    evaluation_eligible: bool = True
+    evaluation_eligible: bool = False
 
 
 class AIGateway:
@@ -34,8 +37,7 @@ class AIGateway:
     FALLBACK_PROVIDER = "deterministic"
     FALLBACK_MODEL = "rule-based-fallback"
 
-    # AI-021: initial language coverage registry.
-    # Provider-specific language support can be expanded later.
+    # AI-021: supported language coverage.
     SUPPORTED_LANGUAGES = {
         "english",
         "hindi",
@@ -51,17 +53,37 @@ class AIGateway:
         "urdu",
     }
 
-    def __init__(self):
+    def __init__(
+        self,
+        provider_registry: ProviderRegistry | None = None,
+        pii_masker: PIIMasker | None = None,
+        prompt_security: PromptSecurityService | None = None,
+        cost_meter: AICostMeter | None = None,
+    ):
 
-        self.provider_registry = ProviderRegistry(
-            settings.approved_providers
+        self.provider_registry = (
+            provider_registry
+            or ProviderRegistry(
+                settings.approved_providers
+            )
         )
 
-        self.pii_masker = PIIMasker()
-        self.prompt_security = PromptSecurityService()
+        self.pii_masker = (
+            pii_masker
+            or PIIMasker()
+        )
 
-        # AI-020: provider routing and cost metering
-        self.cost_meter = AICostMeter()
+        self.prompt_security = (
+            prompt_security
+            or PromptSecurityService()
+        )
+
+        # AI-020: provider routing and cost metering.
+        self.cost_meter = (
+            cost_meter
+            or AICostMeter()
+        )
+
         self.provider_router = AIProviderRouter(
             self.provider_registry
         )
@@ -82,6 +104,7 @@ class AIGateway:
             self.prompt_security.sanitize(prompt)
         )
 
+        # AI-003: block detected prompt injection.
         if injection_detected:
             return AIResponse(
                 provider=selected_provider,
@@ -97,12 +120,17 @@ class AIGateway:
                 evaluation_eligible=False,
             )
 
+        # AI-001: mask PII before sending data to a provider.
         masked_prompt = self.pii_masker.mask(
             sanitized_prompt
         )
 
+        pii_masked = (
+            masked_prompt != sanitized_prompt
+        )
+
         try:
-            # AI-020: route only through the approved provider registry.
+            # AI-020: route through the approved provider registry.
             provider_config, selected_model = (
                 self.provider_router.route(
                     provider=selected_provider,
@@ -110,57 +138,85 @@ class AIGateway:
                 )
             )
 
-            # Mock provider for initial testing.
-            if provider_config.name == "mock":
-                content = (
-                    "Mock AI response generated successfully."
-                )
-
-                input_tokens = len(masked_prompt.split())
-                output_tokens = len(content.split())
-                estimated_cost = 0.0
-
-                # AI-020: record usage/cost.
-                self.cost_meter.record(
+            # Execute the selected provider.
+            content, input_tokens, output_tokens = (
+                await self.provider_registry.generate(
                     provider=provider_config.name,
+                    prompt=masked_prompt,
                     model=selected_model,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    estimated_cost=estimated_cost,
                 )
-
-                return AIResponse(
-                    provider=provider_config.name,
-                    model=selected_model,
-                    content=content,
-                    pii_masked=(
-                        masked_prompt != sanitized_prompt
-                    ),
-                    prompt_injection_detected=False,
-                    fallback_used=False,
-                    input_tokens=input_tokens,
-                    output_tokens=output_tokens,
-                    estimated_cost=estimated_cost,
-                    language=language,
-                    evaluation_eligible=(
-                        language.lower() == "unknown"
-                        or language.lower()
-                        in self.SUPPORTED_LANGUAGES
-                    ),
-                )
-
-            raise RuntimeError(
-                f"AI provider '{selected_provider}' failed"
             )
 
-        except Exception:
+            # AI-020: calculate provider-specific cost.
+            estimated_cost = self._estimate_cost(
+                provider=provider_config.name,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+            )
+
+            # AI-020: record provider usage.
+            self.cost_meter.record(
+                provider=provider_config.name,
+                model=selected_model,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                estimated_cost=estimated_cost,
+            )
+
+            normalized_language = language.lower()
+
+            return AIResponse(
+                provider=provider_config.name,
+                model=selected_model,
+                content=content,
+                pii_masked=pii_masked,
+                prompt_injection_detected=False,
+                fallback_used=False,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                estimated_cost=estimated_cost,
+                language=language,
+                evaluation_eligible=(
+                    normalized_language
+                    in self.SUPPORTED_LANGUAGES
+                ),
+            )
+
+        except AIProviderError:
+            # AI-014: provider-specific failures use the
+            # deterministic fallback.
             return self._deterministic_fallback(
                 prompt=masked_prompt,
-                pii_masked=(
-                    masked_prompt != sanitized_prompt
-                ),
+                pii_masked=pii_masked,
                 language=language,
             )
+
+    def _estimate_cost(
+        self,
+        provider: str,
+        input_tokens: int,
+        output_tokens: int,
+    ) -> float:
+
+        if provider.lower() != "anthropic":
+            return 0.0
+
+        input_cost = (
+            input_tokens
+            / 1000
+            * settings.anthropic_input_cost_per_1k_tokens
+        )
+
+        output_cost = (
+            output_tokens
+            / 1000
+            * settings.anthropic_output_cost_per_1k_tokens
+        )
+
+        return round(
+            input_cost + output_cost,
+            8,
+        )
 
     def _deterministic_fallback(
         self,
@@ -169,14 +225,17 @@ class AIGateway:
         language: str = "unknown",
     ) -> AIResponse:
 
-        # AI-020: fallback usage is metered separately.
+        # AI-020: meter fallback usage separately.
         input_tokens = len(prompt.split())
+
+        fallback_content = (
+            "AI provider is currently unavailable. "
+            "A deterministic fallback response was used. "
+            "Please retry the request later."
+        )
+
         output_tokens = len(
-            (
-                "AI provider is currently unavailable. "
-                "A deterministic fallback response was used. "
-                "Please retry the request later."
-            ).split()
+            fallback_content.split()
         )
 
         self.cost_meter.record(
@@ -190,11 +249,7 @@ class AIGateway:
         return AIResponse(
             provider=self.FALLBACK_PROVIDER,
             model=self.FALLBACK_MODEL,
-            content=(
-                "AI provider is currently unavailable. "
-                "A deterministic fallback response was used. "
-                "Please retry the request later."
-            ),
+            content=fallback_content,
             pii_masked=pii_masked,
             prompt_injection_detected=False,
             fallback_used=True,

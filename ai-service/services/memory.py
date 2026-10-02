@@ -1,5 +1,10 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import json
+
+import redis
+
+from core.config import settings
 
 
 @dataclass(frozen=True)
@@ -13,9 +18,33 @@ class ConversationMessage:
 
 
 class ConversationMemoryService:
+    """
+    Redis-backed conversation memory.
+
+    Memory is isolated by:
+        organization_id -> user_id -> conversation_id
+
+    Each conversation expires automatically after the configured TTL.
+    """
 
     def __init__(self):
-        self._messages: list[ConversationMessage] = []
+        self._redis = redis.Redis.from_url(
+            settings.redis_url,
+            decode_responses=True,
+        )
+
+    def _key(
+        self,
+        conversation_id: str,
+        user_id: str,
+        organization_id: str,
+    ) -> str:
+        return (
+            "ai:memory:"
+            f"org:{organization_id}:"
+            f"user:{user_id}:"
+            f"conversation:{conversation_id}"
+        )
 
     def add_message(
         self,
@@ -35,7 +64,30 @@ class ConversationMemoryService:
             created_at=datetime.now(timezone.utc),
         )
 
-        self._messages.append(message)
+        key = self._key(
+            conversation_id,
+            user_id,
+            organization_id,
+        )
+
+        self._redis.rpush(
+            key,
+            json.dumps(
+                {
+                    "conversation_id": message.conversation_id,
+                    "user_id": message.user_id,
+                    "organization_id": message.organization_id,
+                    "role": message.role,
+                    "content": message.content,
+                    "created_at": message.created_at.isoformat(),
+                }
+            ),
+        )
+
+        self._redis.expire(
+            key,
+            settings.redis_memory_ttl_seconds,
+        )
 
         return message
 
@@ -46,15 +98,33 @@ class ConversationMemoryService:
         organization_id: str,
     ) -> list[ConversationMessage]:
 
-        return [
-            message
-            for message in self._messages
-            if (
-                message.conversation_id == conversation_id
-                and message.user_id == user_id
-                and message.organization_id == organization_id
+        key = self._key(
+            conversation_id,
+            user_id,
+            organization_id,
+        )
+
+        stored_messages = self._redis.lrange(key, 0, -1)
+
+        messages = []
+
+        for item in stored_messages:
+            data = json.loads(item)
+
+            messages.append(
+                ConversationMessage(
+                    conversation_id=data["conversation_id"],
+                    user_id=data["user_id"],
+                    organization_id=data["organization_id"],
+                    role=data["role"],
+                    content=data["content"],
+                    created_at=datetime.fromisoformat(
+                        data["created_at"]
+                    ),
+                )
             )
-        ]
+
+        return messages
 
     def clear_conversation(
         self,
@@ -63,12 +133,10 @@ class ConversationMemoryService:
         organization_id: str,
     ) -> None:
 
-        self._messages = [
-            message
-            for message in self._messages
-            if not (
-                message.conversation_id == conversation_id
-                and message.user_id == user_id
-                and message.organization_id == organization_id
-            )
-        ]
+        key = self._key(
+            conversation_id,
+            user_id,
+            organization_id,
+        )
+
+        self._redis.delete(key)
