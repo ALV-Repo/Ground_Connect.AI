@@ -1,4 +1,4 @@
-import { ServiceDebtIndex, GeographicView, MessageAdvanced } from '../Supplements'
+﻿import { ServiceDebtIndex, GeographicView, MessageAdvanced } from '../Supplements'
 import { useTheme } from '../../context/ThemeContext'
 import { useState, useCallback, useMemo } from 'react'
 import { ClipboardCheck, AlertTriangle, Users, Moon, Send, Eye, GitBranch, Building2,
@@ -14,13 +14,13 @@ import AIModule from '../../components/AIModule'
 import { TaskBarChart, MsgAreaChart, CitizenBarChart, EvidenceDonut, ChartLegend } from '../../components/Charts'
 import OrgTree from '../../components/OrgTree'
 
-// ── Vibrant colour palette ──────────────────────────────────────────────────
+// â”€â”€ Vibrant colour palette â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const C = {
   indigo:'#4f46e5', rose:'#f43f5e', emerald:'#10b981', amber:'#f59e0b',
   violet:'#7c3aed', cyan:'#0891b2', orange:'#ea580c', pink:'#ec4899',
 }
 
-// ── Gradient KPI card ───────────────────────────────────────────────────────
+// â”€â”€ Gradient KPI card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function GKpi({ label, value, sub, icon: Icon, grad, trend, trendUp }) {
   return (
     <div className="relative overflow-hidden rounded-2xl p-5 text-white" style={{background: grad}}>
@@ -46,7 +46,7 @@ function GKpi({ label, value, sub, icon: Icon, grad, trend, trendUp }) {
   )
 }
 
-// ── Date range bar ──────────────────────────────────────────────────────────
+// â”€â”€ Date range bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function DateRangeBar({ from, to, onFrom, onTo, quick, setQuick }) {
   const QUICK = ['Today','This week','This month','Last 3 months','All time']
   return (
@@ -67,7 +67,7 @@ function DateRangeBar({ from, to, onFrom, onTo, quick, setQuick }) {
         <span className="text-[11px] text-slate-400">Custom:</span>
         <input type="date" value={from} onChange={e=>onFrom(e.target.value)}
           className="text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400"/>
-        <span className="text-slate-300">→</span>
+        <span className="text-slate-300">â†’</span>
         <input type="date" value={to} onChange={e=>onTo(e.target.value)}
           className="text-[11px] px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400"/>
       </div>
@@ -75,9 +75,9 @@ function DateRangeBar({ from, to, onFrom, onTo, quick, setQuick }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// DASHBOARD — bright, vibrant, date-picker driven
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// DASHBOARD â€” bright, vibrant, date-picker driven
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function Dashboard({ accent }) {
   const [quick, setQuick] = useState('This week')
   const [dateFrom, setDateFrom] = useState('2026-08-01')
@@ -183,11 +183,11 @@ function Dashboard({ accent }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// HIERARCHY — layman-friendly with plain English explanations
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// HIERARCHY â€” layman-friendly with plain English explanations
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const STATUS_EXPLAINER = {
-  active: { label:'Working normally', color:'#10b981', bg:'#ecfdf5', icon:'✓', desc:'This office has a person in charge and is actively reporting.' },
+  active: { label:'Working normally', color:'#10b981', bg:'#ecfdf5', icon:'âœ“', desc:'This office has a person in charge and is actively reporting.' },
   orphaned: { label:'No person in charge!', color:'#f43f5e', bg:'#fff1f2', icon:'!', desc:'Nobody is assigned to run this office right now. All incoming work is being sent up to the nearest office that has a leader.' },
   dark: { label:'Gone silent', color:'#f59e0b', bg:'#fffbeb', icon:'?', desc:'This office has stopped sending reports. We have not heard from them in 7+ days. This could mean they are busy, unreachable, or have a problem.' },
 }
@@ -209,8 +209,8 @@ function NodeCard({ node, onSelect, selected }) {
           </div>
           <div className="text-xs text-slate-400 mt-0.5">
             {node.responsible
-              ? <span className="text-emerald-600 font-medium">👤 {node.responsible}</span>
-              : <span className="text-rose-500 font-bold">⚠ No one in charge</span>}
+              ? <span className="text-emerald-600 font-medium">ðŸ‘¤ {node.responsible}</span>
+              : <span className="text-rose-500 font-bold">âš  No one in charge</span>}
             <span className="mx-2 text-slate-200 dark:text-slate-700">|</span>
             <span>{node.members} members</span>
             <span className="mx-2 text-slate-200 dark:text-slate-700">|</span>
@@ -259,9 +259,9 @@ function HierarchyPage({ accent }) {
         {expandHelp && (
           <div className="px-5 pb-5 pt-3 bg-indigo-50/50 dark:bg-indigo-950/20 grid grid-cols-3 gap-4">
             {[
-              { icon:'🏛', title:'What is this?', body:'This shows your entire organisation as a tree — like a family tree, but for offices. The top is State HQ. Below that are Districts. Below Districts are Zones and Booths.' },
-              { icon:'👤', title:'Person in charge', body:'Every office must have exactly one person responsible for it. If no one is assigned, the office is "orphaned" — all its work automatically gets sent to the nearest office above it that has a leader.' },
-              { icon:'🔕', title:'Dark units', body:'If an office stops sending reports for 7+ days, it is marked as "gone silent". This is just a signal — not an accusation. It could mean connectivity issues, workload, or that something needs attention.' },
+              { icon:'ðŸ›', title:'What is this?', body:'This shows your entire organisation as a tree â€” like a family tree, but for offices. The top is State HQ. Below that are Districts. Below Districts are Zones and Booths.' },
+              { icon:'ðŸ‘¤', title:'Person in charge', body:'Every office must have exactly one person responsible for it. If no one is assigned, the office is "orphaned" â€” all its work automatically gets sent to the nearest office above it that has a leader.' },
+              { icon:'ðŸ”•', title:'Dark units', body:'If an office stops sending reports for 7+ days, it is marked as "gone silent". This is just a signal â€” not an accusation. It could mean connectivity issues, workload, or that something needs attention.' },
             ].map(({icon,title,body})=>(
               <div key={title} className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-900">
                 <div className="text-2xl mb-2">{icon}</div>
@@ -277,7 +277,7 @@ function HierarchyPage({ accent }) {
       <div className="flex gap-3 flex-wrap">
         {Object.entries(STATUS_EXPLAINER).map(([key,{label,color,bg,icon}])=>(
           <div key={key} className="flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold" style={{background:bg,borderColor:color+'33',color}}>
-            <span className="text-base">{icon === '✓' ? '✅' : icon === '!' ? '🚨' : '⚠️'}</span>
+            <span className="text-base">{icon === 'âœ“' ? 'âœ…' : icon === '!' ? 'ðŸš¨' : 'âš ï¸'}</span>
             {label}
           </div>
         ))}
@@ -292,7 +292,7 @@ function HierarchyPage({ accent }) {
               <Search size={12}/>
               <input value={searchQ} onChange={e=>setSearchQ(e.target.value)}
                 className="bg-transparent outline-none w-32 text-slate-700 dark:text-slate-300"
-                placeholder="Search office or person…"/>
+                placeholder="Search office or personâ€¦"/>
             </div>
           </div>
 
@@ -337,7 +337,7 @@ function HierarchyPage({ accent }) {
             <div className="space-y-4">
               {/* Status banner */}
               <div className="p-4 rounded-xl border-2 text-center" style={{background:s.bg,borderColor:s.color+'44'}}>
-                <div className="text-3xl mb-2">{s.icon==='✓'?'✅':s.icon==='!'?'🚨':'⚠️'}</div>
+                <div className="text-3xl mb-2">{s.icon==='âœ“'?'âœ…':s.icon==='!'?'ðŸš¨':'âš ï¸'}</div>
                 <div className="text-sm font-black" style={{color:s.color}}>{s.label}</div>
                 <div className="text-xs text-slate-500 mt-1 leading-relaxed">{s.desc}</div>
               </div>
@@ -347,13 +347,13 @@ function HierarchyPage({ accent }) {
                 <div className="text-xs text-slate-400 mt-0.5">{LEVEL_NAMES[sel.level] || 'Office'} level</div>
               </div>
 
-              {/* Stats — plain language */}
+              {/* Stats â€” plain language */}
               <div className="space-y-2">
                 {[
-                  { icon:'👤', label:'Person in charge', value:sel.responsible||'Nobody assigned yet', warn:!sel.responsible },
-                  { icon:'👥', label:'Total members', value:`${sel.members} people in this office` },
-                  { icon:'📋', label:'Active tasks', value:`${sel.tasks} tasks currently assigned` },
-                  { icon:'🏠', label:'Citizen issues', value:sel.issues>0?`${sel.issues} open complaints`:'No open complaints', good:sel.issues===0 },
+                  { icon:'ðŸ‘¤', label:'Person in charge', value:sel.responsible||'Nobody assigned yet', warn:!sel.responsible },
+                  { icon:'ðŸ‘¥', label:'Total members', value:`${sel.members} people in this office` },
+                  { icon:'ðŸ“‹', label:'Active tasks', value:`${sel.tasks} tasks currently assigned` },
+                  { icon:'ðŸ ', label:'Citizen issues', value:sel.issues>0?`${sel.issues} open complaints`:'No open complaints', good:sel.issues===0 },
                 ].map(({icon,label,value,warn,good})=>(
                   <div key={label} className={`flex items-start gap-3 p-3 rounded-xl ${warn?'bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-800':good?'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800':'bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800'}`}>
                     <span className="text-base flex-shrink-0">{icon}</span>
@@ -368,19 +368,19 @@ function HierarchyPage({ accent }) {
               {/* Contextual tips */}
               {sel.status==='orphaned' && (
                 <div className="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-900/20 border-2 border-rose-200 dark:border-rose-800">
-                  <div className="text-xs font-black text-rose-700 dark:text-rose-400 mb-1">🚨 Action needed</div>
+                  <div className="text-xs font-black text-rose-700 dark:text-rose-400 mb-1">ðŸš¨ Action needed</div>
                   <p className="text-xs text-rose-600 dark:text-rose-400">This office has no leader. Until someone is assigned, all messages and tasks coming to this office are automatically forwarded to the office above it. Please assign a responsible person as soon as possible.</p>
                 </div>
               )}
               {sel.status==='dark' && (
                 <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-900/20 border-2 border-amber-200 dark:border-amber-800">
-                  <div className="text-xs font-black text-amber-700 dark:text-amber-400 mb-1">⚠️ No recent activity</div>
-                  <p className="text-xs text-amber-600 dark:text-amber-400">This office has not sent any field reports in 7+ days. This doesn't mean something is wrong — but it is worth checking in. The AI Dark Radar can give you more details.</p>
+                  <div className="text-xs font-black text-amber-700 dark:text-amber-400 mb-1">âš ï¸ No recent activity</div>
+                  <p className="text-xs text-amber-600 dark:text-amber-400">This office has not sent any field reports in 7+ days. This doesn't mean something is wrong â€” but it is worth checking in. The AI Dark Radar can give you more details.</p>
                 </div>
               )}
               {sel.status==='active' && (
                 <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800">
-                  <div className="text-xs font-black text-emerald-700 dark:text-emerald-400 mb-1">✅ Healthy office</div>
+                  <div className="text-xs font-black text-emerald-700 dark:text-emerald-400 mb-1">âœ… Healthy office</div>
                   <p className="text-xs text-emerald-600 dark:text-emerald-400">This office has a person in charge and is actively reporting. Everything looks normal here.</p>
                 </div>
               )}
@@ -400,9 +400,9 @@ function HierarchyPage({ accent }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // MESSAGES PAGE
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function MessagesPage({ accent }) {
   const [filter, setFilter] = useState('All')
   const [compose, setCompose] = useState(false)
@@ -445,11 +445,11 @@ function MessagesPage({ accent }) {
             <div><label className="label">Download allowed</label><select className="select"><option>No</option><option>Yes</option></select></div>
             <div><label className="label">Expiry</label><input className="input-sm" type="datetime-local"/></div>
           </div>
-          <input className="input mb-3" placeholder="Subject…"/>
-          <textarea className="textarea mb-3" rows={4} placeholder="Message body…"/>
+          <input className="input mb-3" placeholder="Subjectâ€¦"/>
+          <textarea className="textarea mb-3" rows={4} placeholder="Message bodyâ€¦"/>
           {msgType==='Emergency'&&<Alert type="danger" className="mb-3">Emergency messages bypass quiet hours, require acknowledgement from all recipients, and are separately audited.</Alert>}
           <div className="flex items-center justify-between">
-            <p className="text-[10px] text-slate-400">Blast-radius preview required before sending to ≥500 recipients</p>
+            <p className="text-[10px] text-slate-400">Blast-radius preview required before sending to â‰¥500 recipients</p>
             <div className="flex gap-2">
               <button onClick={()=>setCompose(false)} className="btn-secondary btn-sm">Cancel</button>
               <button onClick={()=>setShowPreview(true)} className="btn-primary btn-sm"><Eye size={13}/>Preview blast radius</button>
@@ -461,7 +461,7 @@ function MessagesPage({ accent }) {
       <Modal open={showPreview} onClose={()=>setShowPreview(false)} title="Blast-radius preview" size="md"
         footer={<><button className="btn-secondary btn-sm" onClick={()=>setShowPreview(false)}>Cancel</button><button className="btn-primary btn-sm">Send message</button></>}>
         <div className="space-y-4">
-          <Alert type="warning">This preview is computed by actually evaluating the targeting query — not an estimate.</Alert>
+          <Alert type="warning">This preview is computed by actually evaluating the targeting query â€” not an estimate.</Alert>
           <div className="grid grid-cols-2 gap-3">
             <KpiCard label="Total recipients" value="12,400" deltaPos icon={Users} accent="#4f46e5"/>
             <KpiCard label="Unreachable" value="23" deltaPos={false} icon={AlertTriangle} accent="#f43f5e" sub="Orphaned / suspended nodes"/>
@@ -476,7 +476,7 @@ function MessagesPage({ accent }) {
           </div>
           <div className="flex justify-between text-xs p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800">
             <span className="text-amber-700 dark:text-amber-400 font-semibold">Estimated SMS cost (fallback)</span>
-            <span className="font-bold text-amber-700 dark:text-amber-400">₹ 1,240</span>
+            <span className="font-bold text-amber-700 dark:text-amber-400">â‚¹ 1,240</span>
           </div>
           <Alert type="info">Sends above 10,000 recipients require two-person approval (TPI-01). A second approver will be notified.</Alert>
         </div>
@@ -513,19 +513,19 @@ function MessagesPage({ accent }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-// TASKS — rich create form with step-by-step UX
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// TASKS â€” rich create form with step-by-step UX
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const PRIORITY_META = {
-  High:   { color:'#f43f5e', bg:'#fff1f2', label:'🔴 High priority',   desc:'Needs immediate attention' },
-  Medium: { color:'#f59e0b', bg:'#fffbeb', label:'🟡 Medium priority', desc:'Important but not urgent' },
-  Low:    { color:'#10b981', bg:'#ecfdf5', label:'🟢 Low priority',    desc:'Can wait a few days' },
+  High:   { color:'#f43f5e', bg:'#fff1f2', label:'ðŸ”´ High priority',   desc:'Needs immediate attention' },
+  Medium: { color:'#f59e0b', bg:'#fffbeb', label:'ðŸŸ¡ Medium priority', desc:'Important but not urgent' },
+  Low:    { color:'#10b981', bg:'#ecfdf5', label:'ðŸŸ¢ Low priority',    desc:'Can wait a few days' },
 }
 const EVIDENCE_META = {
-  'Photo evidence':     { icon:'📷', desc:'Assignee must take a photo as proof of completion' },
-  'Voice report':       { icon:'🎙', desc:'Assignee must record a voice note explaining what they did' },
-  'Text report only':   { icon:'✍️', desc:'Assignee writes a short text update' },
-  'None':               { icon:'✓', desc:'No evidence needed — just mark as done' },
+  'Photo evidence':     { icon:'ðŸ“·', desc:'Assignee must take a photo as proof of completion' },
+  'Voice report':       { icon:'ðŸŽ™', desc:'Assignee must record a voice note explaining what they did' },
+  'Text report only':   { icon:'âœï¸', desc:'Assignee writes a short text update' },
+  'None':               { icon:'âœ“', desc:'No evidence needed â€” just mark as done' },
 }
 
 function TasksPage({ accent }) {
@@ -534,8 +534,8 @@ function TasksPage({ accent }) {
   const [selected, setSelected] = useState(null)
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({
-    title:'', desc:'', assignee:'Arjun Patel — Field Worker',
-    node:'Zone A — Booth 12', priority:'High', due:'',
+    title:'', desc:'', assignee:'Arjun Patel â€” Field Worker',
+    node:'Zone A â€” Booth 12', priority:'High', due:'',
     escalation:'Escalate to me after 24h', evidence:'Photo evidence',
   })
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
@@ -543,7 +543,7 @@ function TasksPage({ accent }) {
 
   const STEPS = ['What is the task?','Who does it?','How urgent is it?','Review & create']
 
-  const openCreate = () => { setStep(1); setForm({title:'',desc:'',assignee:'Arjun Patel — Field Worker',node:'Zone A — Booth 12',priority:'High',due:'',escalation:'Escalate to me after 24h',evidence:'Photo evidence'}); setShowCreate(true) }
+  const openCreate = () => { setStep(1); setForm({title:'',desc:'',assignee:'Arjun Patel â€” Field Worker',node:'Zone A â€” Booth 12',priority:'High',due:'',escalation:'Escalate to me after 24h',evidence:'Photo evidence'}); setShowCreate(true) }
 
   return (
     <div className="space-y-4 page">
@@ -570,7 +570,7 @@ function TasksPage({ accent }) {
         </table>
       </div>
 
-      <Alert type="info">Evidence mix: <strong>72% attested</strong>, 20% unattested, 8% flagged. Flags are for human review — never automatic penalties.</Alert>
+      <Alert type="info">Evidence mix: <strong>72% attested</strong>, 20% unattested, 8% flagged. Flags are for human review â€” never automatic penalties.</Alert>
 
       {/* STEP-BY-STEP TASK CREATE MODAL */}
       <Modal open={showCreate} onClose={()=>setShowCreate(false)} title="Create new task" size="lg"
@@ -582,9 +582,9 @@ function TasksPage({ accent }) {
               ))}
             </div>
             <div className="flex gap-2">
-              {step > 1 && <button onClick={()=>setStep(s=>s-1)} className="btn-secondary btn-sm">← Back</button>}
+              {step > 1 && <button onClick={()=>setStep(s=>s-1)} className="btn-secondary btn-sm">â† Back</button>}
               {step < 4
-                ? <button onClick={()=>setStep(s=>s+1)} disabled={step===1&&!form.title} className="btn-primary btn-sm">Next →</button>
+                ? <button onClick={()=>setStep(s=>s+1)} disabled={step===1&&!form.title} className="btn-primary btn-sm">Next â†’</button>
                 : <button onClick={()=>setShowCreate(false)} className="btn-primary btn-sm"><CheckCircle2 size={13}/>Create task</button>
               }
             </div>
@@ -596,7 +596,7 @@ function TasksPage({ accent }) {
           {STEPS.map((s,i)=>(
             <div key={s} className="flex items-center gap-2">
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black transition-all ${i<step-1?'bg-emerald-500 text-white':i===step-1?'bg-indigo-600 text-white':'bg-slate-100 dark:bg-slate-800 text-slate-400'}`}>
-                {i<step-1?'✓':i+1}
+                {i<step-1?'âœ“':i+1}
               </div>
               <span className={`text-[11px] font-bold ${i===step-1?'text-indigo-600':'text-slate-400'}`}>{s}</span>
               {i<3 && <ChevronRight size={12} className="text-slate-300 mx-1"/>}
@@ -608,7 +608,7 @@ function TasksPage({ accent }) {
         {step===1 && (
           <div className="space-y-4">
             <div className="text-center mb-4">
-              <div className="text-2xl mb-1">📋</div>
+              <div className="text-2xl mb-1">ðŸ“‹</div>
               <div className="text-base font-black text-slate-900 dark:text-white">What needs to be done?</div>
               <div className="text-xs text-slate-400">Give the task a clear name and explain what's expected</div>
             </div>
@@ -616,7 +616,7 @@ function TasksPage({ accent }) {
               <label htmlFor="task-title" className="label">Task name <span className="text-rose-500">*</span></label>
               <input id="task-title" aria-label="Task name" className="input" placeholder="e.g. Inspect water pipes in Zone A sector 3"
                 value={form.title} onChange={e=>set('title',e.target.value)}/>
-              <div className="text-[10px] text-slate-400 mt-1">Be specific — the field worker needs to know exactly what to do</div>
+              <div className="text-[10px] text-slate-400 mt-1">Be specific â€” the field worker needs to know exactly what to do</div>
             </div>
             <div>
               <label className="label">Detailed instructions</label>
@@ -644,26 +644,26 @@ function TasksPage({ accent }) {
         {step===2 && (
           <div className="space-y-4">
             <div className="text-center mb-4">
-              <div className="text-2xl mb-1">👤</div>
+              <div className="text-2xl mb-1">ðŸ‘¤</div>
               <div className="text-base font-black text-slate-900 dark:text-white">Who should do this?</div>
               <div className="text-xs text-slate-400">You can only assign to people within your team</div>
             </div>
             <div>
               <label className="label">Assign to</label>
               <select className="select" value={form.assignee} onChange={e=>set('assignee',e.target.value)}>
-                <option>Arjun Patel — Field Worker (Zone A)</option>
-                <option>Sita Devi — Coordinator (North District)</option>
-                <option>Venkat Rao — Field Worker (Zone C)</option>
-                <option>Priya Das — Coordinator (Zone D)</option>
+                <option>Arjun Patel â€” Field Worker (Zone A)</option>
+                <option>Sita Devi â€” Coordinator (North District)</option>
+                <option>Venkat Rao â€” Field Worker (Zone C)</option>
+                <option>Priya Das â€” Coordinator (Zone D)</option>
               </select>
             </div>
             <div>
               <label className="label">Which office (zone) is this for?</label>
               <select className="select" value={form.node} onChange={e=>set('node',e.target.value)}>
-                <option>Zone A — Booth 12</option>
-                <option>Zone B — Booth 19</option>
-                <option>Zone C — Booth 31</option>
-                <option>Zone D — Booth 44</option>
+                <option>Zone A â€” Booth 12</option>
+                <option>Zone B â€” Booth 19</option>
+                <option>Zone C â€” Booth 31</option>
+                <option>Zone D â€” Booth 44</option>
                 <option>North District</option>
               </select>
               <div className="text-[10px] text-slate-400 mt-1">You can only assign to offices within your authorised area</div>
@@ -684,7 +684,7 @@ function TasksPage({ accent }) {
         {step===3 && (
           <div className="space-y-4">
             <div className="text-center mb-4">
-              <div className="text-2xl mb-1">⏰</div>
+              <div className="text-2xl mb-1">â°</div>
               <div className="text-base font-black text-slate-900 dark:text-white">How urgent is this?</div>
               <div className="text-xs text-slate-400">Set the priority and deadline so the assignee knows what to focus on</div>
             </div>
@@ -714,19 +714,19 @@ function TasksPage({ accent }) {
         {step===4 && (
           <div className="space-y-4">
             <div className="text-center mb-4">
-              <div className="text-2xl mb-1">✅</div>
+              <div className="text-2xl mb-1">âœ…</div>
               <div className="text-base font-black text-slate-900 dark:text-white">Review before creating</div>
               <div className="text-xs text-slate-400">Make sure everything looks right</div>
             </div>
             <div className="space-y-2">
               {[
-                ['📋 Task', form.title || '(not set)'],
-                ['👤 Assigned to', form.assignee],
-                ['📍 Office', form.node],
-                ['🔴 Priority', form.priority],
-                ['📅 Due', form.due || 'No deadline set'],
-                ['📷 Proof needed', form.evidence],
-                ['⏫ If stuck', form.escalation],
+                ['ðŸ“‹ Task', form.title || '(not set)'],
+                ['ðŸ‘¤ Assigned to', form.assignee],
+                ['ðŸ“ Office', form.node],
+                ['ðŸ”´ Priority', form.priority],
+                ['ðŸ“… Due', form.due || 'No deadline set'],
+                ['ðŸ“· Proof needed', form.evidence],
+                ['â« If stuck', form.escalation],
               ].map(([label, value])=>(
                 <div key={label} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 text-sm">
                   <span className="text-base w-6 flex-shrink-0">{label.split(' ')[0]}</span>
@@ -735,7 +735,7 @@ function TasksPage({ accent }) {
                 </div>
               ))}
             </div>
-            {form.priority==='High' && <Alert type="danger">High-priority task — the assignee will be notified immediately.</Alert>}
+            {form.priority==='High' && <Alert type="danger">High-priority task â€” the assignee will be notified immediately.</Alert>}
           </div>
         )}
       </Modal>
@@ -758,9 +758,9 @@ function TasksPage({ accent }) {
   )
 }
 
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 // OTHER PAGES (unchanged)
-// ══════════════════════════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 function CitizenPage({ accent }) {
   const [filter, setFilter] = useState('All')
   const [sel, setSel] = useState(null)
@@ -834,9 +834,9 @@ function AnalyticsPage({ accent }) {
       </div>
       <div className="card p-5">
         <SectionHeader title="Dark unit radar" icon={Moon} accent={C.amber}/>
-        <Alert type="warning" className="mb-4">3 units flagged for silence. Metrics measure engagement absence only — never loyalty.</Alert>
+        <Alert type="warning" className="mb-4">3 units flagged for silence. Metrics measure engagement absence only â€” never loyalty.</Alert>
         <div className="space-y-3">
-          {[{node:'Zone C — Booth 31',issue:'No field reports for 7 days',severity:'high'},{node:'South District',issue:'Leader account inactive for 5 days',severity:'high'},{node:'Zone B — Booth 19',issue:'Below baseline issue intake',severity:'medium'}].map((d,i)=>(
+          {[{node:'Zone C â€” Booth 31',issue:'No field reports for 7 days',severity:'high'},{node:'South District',issue:'Leader account inactive for 5 days',severity:'high'},{node:'Zone B â€” Booth 19',issue:'Below baseline issue intake',severity:'medium'}].map((d,i)=>(
             <div key={`leader-idx-${i}`} className={`p-3.5 rounded-xl border ${d.severity==='high'?'border-rose-100 bg-rose-50 dark:bg-rose-900/10 dark:border-rose-900':'border-amber-100 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-900'}`}>
               <div className="flex items-center justify-between mb-1">
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{d.node}</span>
@@ -852,50 +852,98 @@ function AnalyticsPage({ accent }) {
 }
 
 function DelegationPage({ accent }) {
+  const [delegations, setDelegations] = useState(() => DELEGATIONS.map(d => ({ ...d })))
   const [showCreate, setShowCreate] = useState(false)
   const [confirmRevoke, setConfirmRevoke] = useState(null)
+  const [error, setError] = useState('')
+  const [form, setForm] = useState({
+    delegatee: 'Sita Devi — Coordinator',
+    scope: 'North District tasks and messaging',
+    from: '',
+    to: '',
+    reason: '',
+  })
+
+  const updateForm = (field, value) => setForm(current => ({ ...current, [field]: value }))
+
+  const createDelegation = () => {
+    setError('')
+    if (!form.from || !form.to || !form.reason.trim()) {
+      setError('Please enter a start date, end date, and reason.')
+      return
+    }
+    if (form.to < form.from) {
+      setError('The end date must be on or after the start date.')
+      return
+    }
+
+    const delegatee = form.delegatee.split(' — ')[0]
+    const newDelegation = {
+      id: 'DEL-' + String(Date.now()).slice(-6),
+      delegator: 'Ravi Kumar',
+      delegatee,
+      scope: form.scope,
+      from: form.from,
+      to: form.to,
+      reason: form.reason.trim(),
+      status: 'active',
+    }
+
+    setDelegations(current => [newDelegation, ...current])
+    setForm({ delegatee: 'Sita Devi — Coordinator', scope: 'North District tasks and messaging', from: '', to: '', reason: '' })
+    setShowCreate(false)
+  }
+
+  const revokeDelegation = () => {
+    if (!confirmRevoke) return
+    setDelegations(current => current.map(d =>
+      d.id === confirmRevoke.id ? { ...d, status: 'revoked' } : d
+    ))
+    setConfirmRevoke(null)
+  }
+
   return (
     <div className="space-y-4 page">
       <div className="flex items-center justify-between">
         <Alert type="info" className="flex-1 mr-4">Delegation is the only supported mechanism for temporary hand-over. No credential sharing is permitted.</Alert>
-        <button onClick={()=>setShowCreate(true)} className="btn-primary btn-sm flex-shrink-0"><PlusCircle size={13}/>New delegation</button>
+        <button onClick={() => { setError(''); setShowCreate(true) }} className="btn-primary btn-sm flex-shrink-0"><PlusCircle size={13}/>New delegation</button>
       </div>
-      <div className="card overflow-hidden">
+      <div className="card overflow-x-auto">
         <table className="tbl"><thead><tr><th>ID</th><th>Delegator</th><th>Delegatee</th><th>Scope</th><th>From</th><th>To</th><th>Reason</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody>{DELEGATIONS.map(d=>(
-          <tr key={d.id}>
-            <td className="font-mono font-bold text-primary-600 dark:text-primary-400">{d.id}</td>
-            <td className="font-semibold">{d.delegator}</td>
-            <td>{d.delegatee}</td>
-            <td className="text-slate-500 max-w-xs truncate">{d.scope}</td>
-            <td className="text-slate-400">{d.from}</td>
-            <td className="text-slate-400">{d.to}</td>
-            <td className="text-slate-500">{d.reason}</td>
-            <td><StatusBadge status={d.status}/></td>
-            <td>{d.status==='active'&&<button onClick={()=>setConfirmRevoke(d)} className="btn-xs btn-danger">Revoke</button>}</td>
-          </tr>
-        ))}</tbody>
+          <tbody>{delegations.map(d => (
+            <tr key={d.id}>
+              <td className="font-mono font-bold text-primary-600 dark:text-primary-400">{d.id}</td>
+              <td className="font-semibold">{d.delegator}</td>
+              <td>{d.delegatee}</td>
+              <td className="text-slate-500 max-w-xs truncate">{d.scope}</td>
+              <td className="text-slate-400">{d.from}</td>
+              <td className="text-slate-400">{d.to}</td>
+              <td className="text-slate-500">{d.reason}</td>
+              <td><StatusBadge status={d.status}/></td>
+              <td>{d.status === 'active' && <button onClick={() => setConfirmRevoke(d)} className="btn-xs btn-danger">Revoke</button>}</td>
+            </tr>
+          ))}</tbody>
         </table>
       </div>
       <Alert type="warning">All actions performed under delegation are permanently attributed as "X acting for Y" in all records and audit events.</Alert>
-      <Modal open={showCreate} onClose={()=>setShowCreate(false)} title="Create delegation" size="md"
-        footer={<><button className="btn-secondary btn-sm" onClick={()=>setShowCreate(false)}>Cancel</button><button className="btn-primary btn-sm">Create delegation</button></>}>
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create delegation" size="md"
+        footer={<><button className="btn-secondary btn-sm" onClick={() => setShowCreate(false)}>Cancel</button><button className="btn-primary btn-sm" onClick={createDelegation}>Create delegation</button></>}>
         <div className="space-y-4">
-          <div><label className="label">Delegate to</label><select className="select"><option>Sita Devi — Coordinator</option><option>Kiran Rao — Leader</option><option>Anil Shah — Leader</option></select></div>
-          <div><label className="label">Scope (subset of your authority)</label><select className="select"><option>North District tasks and messaging</option><option>Zone A field reports only</option><option>Full district authority</option></select></div>
+          <div><label className="label">Delegate to</label><select className="select" value={form.delegatee} onChange={e => updateForm('delegatee', e.target.value)}><option>Sita Devi — Coordinator</option><option>Kiran Rao — Leader</option><option>Anil Shah — Leader</option></select></div>
+          <div><label className="label">Scope (subset of your authority)</label><select className="select" value={form.scope} onChange={e => updateForm('scope', e.target.value)}><option>North District tasks and messaging</option><option>Zone A field reports only</option><option>Full district authority</option></select></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><label className="label">From</label><input className="input" type="date"/></div>
-            <div><label className="label">To (auto-expires)</label><input className="input" type="date"/></div>
+            <div><label className="label">From</label><input className="input" type="date" value={form.from} onChange={e => updateForm('from', e.target.value)}/></div>
+            <div><label className="label">To (auto-expires)</label><input className="input" type="date" min={form.from || undefined} value={form.to} onChange={e => updateForm('to', e.target.value)}/></div>
           </div>
-          <div><label className="label">Reason</label><input className="input" placeholder="Annual leave / Training / etc."/></div>
+          <div><label className="label">Reason</label><input className="input" value={form.reason} onChange={e => updateForm('reason', e.target.value)} placeholder="Annual leave / Training / etc."/></div>
+          {error && <Alert type="error">{error}</Alert>}
           <Alert type="warning">Re-delegation beyond depth 1 is rejected. The delegatee cannot delegate further.</Alert>
         </div>
       </Modal>
-      <Confirm open={!!confirmRevoke} onClose={()=>setConfirmRevoke(null)} onConfirm={()=>setConfirmRevoke(null)} title="Revoke delegation" message={`Revoke delegation ${confirmRevoke?.id} from ${confirmRevoke?.delegatee}? Effect within 60 seconds.`} danger/>
+      <Confirm open={!!confirmRevoke} onClose={() => setConfirmRevoke(null)} onConfirm={revokeDelegation} title="Revoke delegation" message={`Revoke delegation ${confirmRevoke?.id} from ${confirmRevoke?.delegatee}?`} danger/>
     </div>
   )
 }
-
 export default function Leader({ page, user }) {
   const { accent } = useTheme()
   const pages = {
@@ -912,3 +960,5 @@ export default function Leader({ page, user }) {
   }
   return pages[page] || <Dashboard accent={accent}/>
 }
+
+

@@ -7,7 +7,8 @@ import { useTheme } from '../../context/ThemeContext'
 import { KpiCard, SectionHeader, FilterPills, StatusBadge, MsgBadge, Modal, Alert, Avatar, EmptyState, Confirm, DateRangePicker } from '../../components/UI'
 import { TaskBarChart, MsgAreaChart, EvidenceDonut, LineMetricChart, ChartLegend } from '../../components/Charts'
 import OrgTree from '../../components/OrgTree'
-
+import Papa from 'papaparse'
+import * as XLSX from 'xlsx'
 // ── Coordinator ───────────────────────────────────────────────────────────
 function CoordTaskBoard({ accent }) {
   const [filter, setFilter] = useState('All')
@@ -500,43 +501,353 @@ function OAMembers({ accent }) {
     </div>
   )
 }
-
 function OABulkImport({ accent }) {
   const [step, setStep] = useState('upload')
-  const VALIDATION = [{row:1,name:'Vikram Das',mobile:'+91 98765 55555',role:'field_worker',node:'Zone A',status:'accepted',note:''},{row:2,name:'Anita Rao',mobile:'+91 98765 55556',role:'coordinator',node:'Zone B',status:'accepted',note:''},{row:3,name:'Raj Kumar',mobile:'+91 98765 55555',role:'field_worker',node:'Zone A',status:'rejected',note:'Duplicate mobile number'},{row:4,name:'',mobile:'+91 98765 55558',role:'unknown',node:'Zone X',status:'rejected',note:'Invalid role and unknown node'}]
+  const [file, setFile] = useState(null)
+  const [rows, setRows] = useState([])
+  const [error, setError] = useState('')
+  const [committed, setCommitted] = useState(false)
+  const [dragging, setDragging] = useState(false)
+
+  const allowedRoles = ['field_worker', 'coordinator', 'leader']
+  const allowedNodes = [
+    'Zone A', 'Zone B', 'North District',
+    'South District', 'East District', 'State HQ'
+  ]
+
+  const resetImport = () => {
+    setStep('upload')
+    setFile(null)
+    setRows([])
+    setError('')
+    setCommitted(false)
+  }
+
+  const processFile = async (selectedFile) => {
+    setError('')
+    setRows([])
+    setCommitted(false)
+
+    if (!selectedFile) return
+
+    if (!/\.(csv|xlsx|xls)$/i.test(selectedFile.name)) {
+      setError('Please select a CSV or Excel file.')
+      return
+    }
+
+    if (selectedFile.size > 50 * 1024 * 1024) {
+      setError('File size must be less than 50 MB.')
+      return
+    }
+
+    try {
+      let data = []
+
+      if (/\.csv$/i.test(selectedFile.name)) {
+        const text = await selectedFile.text()
+        const result = Papa.parse(text, {
+          header: true,
+          skipEmptyLines: true,
+          transformHeader: header => header.trim().toLowerCase()
+        })
+
+        if (result.errors.length > 0) {
+          setError('Some CSV rows could not be parsed. Check the file format.')
+          return
+        }
+
+        data = result.data
+      } else {
+        const buffer = await selectedFile.arrayBuffer()
+        const workbook = XLSX.read(buffer, { type: 'array' })
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
+
+        if (!firstSheet) {
+          setError('The Excel file does not contain a worksheet.')
+          return
+        }
+
+        data = XLSX.utils.sheet_to_json(firstSheet, {
+          defval: '',
+          raw: false
+        }).map(row =>
+          Object.fromEntries(
+            Object.entries(row).map(([key, value]) => [
+              key.trim().toLowerCase(),
+              String(value ?? '').trim()
+            ])
+          )
+        )
+      }
+
+      if (!data.length) {
+        setError('No data rows found in the selected file.')
+        return
+      }
+
+      const firstRow = data[0]
+      const required = ['name', 'mobile', 'role', 'node']
+      const missing = required.filter(
+        column => !Object.keys(firstRow).includes(column)
+      )
+
+      if (missing.length) {
+        setError(`Missing required columns: ${missing.join(', ')}`)
+        return
+      }
+
+      const seenMobiles = new Set()
+
+      const validated = data.map((row, index) => {
+        const name = String(row.name ?? '').trim()
+        const mobile = String(row.mobile ?? '').trim()
+        const role = String(row.role ?? '').trim().toLowerCase()
+        const node = String(row.node ?? '').trim()
+        const email = String(row.email ?? '').trim()
+        const language = String(row.language ?? '').trim()
+
+        const normalizedMobile = mobile.replace(/\D/g, '')
+        const notes = []
+
+        if (!name) notes.push('Name is required')
+
+        if (normalizedMobile.length < 10 || normalizedMobile.length > 15) {
+          notes.push('Invalid mobile number')
+        }
+
+        if (!allowedRoles.includes(role)) {
+          notes.push('Invalid role')
+        }
+
+        if (!allowedNodes.some(
+          allowed => allowed.toLowerCase() === node.toLowerCase()
+        )) {
+          notes.push('Unknown node')
+        }
+
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          notes.push('Invalid email')
+        }
+
+        if (normalizedMobile && seenMobiles.has(normalizedMobile)) {
+          notes.push('Duplicate mobile number')
+        }
+
+        if (normalizedMobile) seenMobiles.add(normalizedMobile)
+
+        return {
+          row: index + 2,
+          name,
+          mobile,
+          role,
+          node,
+          email,
+          language,
+          status: notes.length ? 'rejected' : 'accepted',
+          note: notes.join(', ')
+        }
+      })
+
+      setFile(selectedFile)
+      setRows(validated)
+      setStep('validate')
+    } catch {
+      setError('Unable to read this file. Please check it and try again.')
+    }
+  }
+
+  const accepted = rows.filter(row => row.status === 'accepted')
+  const rejected = rows.filter(row => row.status === 'rejected')
+
+  const downloadReport = () => {
+    const csv = Papa.unparse(rows.map(row => ({
+      Row: row.row,
+      Name: row.name,
+      Mobile: row.mobile,
+      Role: row.role,
+      Node: row.node,
+      Email: row.email,
+      Language: row.language,
+      Result: row.status,
+      Reason: row.note
+    })))
+
+    const blob = new Blob([csv], {
+      type: 'text/csv;charset=utf-8;'
+    })
+
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'member-import-validation.csv'
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <div className="space-y-4 page">
-      <Alert type="info">Bulk import accepts Excel (.xlsx) or CSV. A mandatory dry-run validation runs before any records are committed.</Alert>
-      {step==='upload'&&(
-        <div className="card p-8 text-center space-y-4">
-          <div className="w-16 h-16 rounded-2xl bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center mx-auto"><Upload size={24} className="text-primary-600"/></div>
-          <div><div className="font-bold text-slate-900 dark:text-white">Drop your file here</div><div className="text-sm text-slate-400 mt-1">Excel (.xlsx) or CSV — max 50MB</div></div>
-          <button onClick={()=>setStep('validate')} className="btn-primary">Upload and validate</button>
-          <div className="text-xs text-slate-400">Required columns: name, mobile, role, node · Optional: email, language</div>
+      <Alert type="info">
+        Upload a CSV or Excel file to validate member records before import.
+        This demo performs validation in your browser; it does not save records
+        to a backend database.
+      </Alert>
+
+      {step === 'upload' && (
+        <div
+          onDragOver={event => {
+            event.preventDefault()
+            setDragging(true)
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={event => {
+            event.preventDefault()
+            setDragging(false)
+            processFile(event.dataTransfer.files?.[0])
+          }}
+          className={`card p-8 text-center space-y-4 border-2 border-dashed ${
+            dragging
+              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
+              : 'border-slate-200 dark:border-slate-700'
+          }`}
+        >
+          <div className="w-16 h-16 rounded-2xl bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center mx-auto">
+            <Upload size={24} className="text-primary-600" />
+          </div>
+
+          <div>
+            <div className="font-bold text-slate-900 dark:text-white">
+              Drop your file here
+            </div>
+            <div className="text-sm text-slate-400 mt-1">
+              Excel (.xlsx, .xls) or CSV — maximum 50 MB
+            </div>
+          </div>
+
+          <label className="btn-primary inline-flex cursor-pointer">
+            <Upload size={14} />
+            Choose file
+            <input
+              type="file"
+              accept=".csv,.xlsx,.xls"
+              className="hidden"
+              onChange={event => processFile(event.target.files?.[0])}
+            />
+          </label>
+
+          <div className="text-xs text-slate-400">
+            Required: name, mobile, role, node
+            <br />
+            Optional: email, language
+          </div>
+
+          {error && <Alert type="danger">{error}</Alert>}
         </div>
       )}
-      {step==='validate'&&(
+
+      {step === 'validate' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
-            <KpiCard label="Total rows" value="4" deltaPos icon={FileText} accent={accent}/>
-            <KpiCard label="Accepted" value="2" deltaPos icon={CheckCircle2} accent="#10b981"/>
-            <KpiCard label="Rejected" value="2" deltaPos={false} icon={XCircle} accent="#f43f5e"/>
+          <div className="card p-4 flex items-center justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-sm font-bold truncate">{file?.name}</div>
+              <div className="text-xs text-slate-400">
+                {rows.length} rows checked
+              </div>
+            </div>
+            <button onClick={resetImport} className="btn-secondary btn-sm">
+              Re-upload
+            </button>
           </div>
-          <div className="card overflow-hidden">
-            <table className="tbl"><thead><tr><th>Row</th><th>Name</th><th>Mobile</th><th>Role</th><th>Node</th><th>Result</th><th>Reason</th></tr></thead>
-            <tbody>{VALIDATION.map(v=><tr key={v.row}><td className="font-mono">{v.row}</td><td className="font-medium">{v.name||'—'}</td><td className="font-mono text-[10px]">{v.mobile}</td><td>{v.role}</td><td>{v.node}</td><td><StatusBadge status={v.status==='accepted'?'active':'denied'}/></td><td className="text-rose-500 text-[10px]">{v.note}</td></tr>)}</tbody>
+
+          {committed && (
+            <Alert type="success">
+              Demo import complete: {accepted.length} accepted records marked
+              as imported. No backend database was changed.
+            </Alert>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <KpiCard
+              label="Total rows"
+              value={String(rows.length)}
+              deltaPos
+              icon={FileText}
+              accent={accent}
+            />
+            <KpiCard
+              label="Accepted"
+              value={String(accepted.length)}
+              deltaPos
+              icon={CheckCircle2}
+              accent="#10b981"
+            />
+            <KpiCard
+              label="Rejected"
+              value={String(rejected.length)}
+              deltaPos={false}
+              icon={XCircle}
+              accent="#f43f5e"
+            />
+          </div>
+
+          <div className="card overflow-x-auto">
+            <table className="tbl">
+              <thead>
+                <tr>
+                  <th>Row</th>
+                  <th>Name</th>
+                  <th>Mobile</th>
+                  <th>Role</th>
+                  <th>Node</th>
+                  <th>Result</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map(row => (
+                  <tr key={row.row}>
+                    <td className="font-mono">{row.row}</td>
+                    <td>{row.name || '—'}</td>
+                    <td className="font-mono text-[10px]">{row.mobile}</td>
+                    <td>{row.role || '—'}</td>
+                    <td>{row.node || '—'}</td>
+                    <td>
+                      <StatusBadge
+                        status={row.status === 'accepted' ? 'active' : 'denied'}
+                      />
+                    </td>
+                    <td className="text-rose-500 text-[10px]">
+                      {row.note || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
-          <div className="flex gap-3">
-            <button onClick={()=>setStep('upload')} className="btn-secondary btn-sm">Re-upload file</button>
-            <button className="btn-primary btn-sm">Commit 2 accepted records</button>
+
+          <div className="flex flex-wrap gap-3">
+            <button onClick={downloadReport} className="btn-secondary btn-sm">
+              <Download size={13} />
+              Download validation report
+            </button>
+
+            <button
+              onClick={() => setCommitted(true)}
+              disabled={accepted.length === 0 || committed}
+              className="btn-primary btn-sm disabled:opacity-50"
+            >
+              Commit {accepted.length} accepted records
+            </button>
           </div>
+
+          <Alert type="warning">
+            Accepted rows can be marked as imported in this demo. Real member
+            creation requires a backend API and server-side validation.
+          </Alert>
         </div>
       )}
     </div>
   )
 }
-
 function OARoles({ accent }) {
   return (
     <div className="space-y-4 page">
@@ -550,7 +861,7 @@ function OARoles({ accent }) {
           ].map(r=>(
             <div key={r.role} className="flex items-center justify-between p-3.5 rounded-xl border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 transition-colors">
               <div><div className="text-xs font-bold text-slate-800 dark:text-slate-200">{r.role.replace(/_/g,' ')}</div><div className="text-[10px] text-slate-400 mt-0.5">{r.desc}</div></div>
-              <div className="flex items-center gap-3"><span className="badge badge-neutral">{r.level}</span><button aria-label="Action" className="btn-xs btn-outline"><Settings size=14 aria-hidden="true"/></button></div>
+              <div className="flex items-center gap-3"><span className="badge badge-neutral">{r.level}</span><button aria-label="Action" className="btn-xs btn-outline"><Settings size={14} aria-hidden="true"/></button></div>
             </div>
           ))}
         </div>
