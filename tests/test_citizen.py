@@ -1,6 +1,24 @@
 from datetime import datetime, timezone
 
+import pytest
+
+from app.core.config import settings
 from tests.test_helpers import create_authenticated_client
+
+
+@pytest.fixture(scope="module", autouse=True)
+def disable_database_for_citizen_unit_tests():
+    """
+    Citizen unit tests use the in-memory service path.
+    Database integration tests should be tested separately.
+    """
+    original_value = settings.database_enabled
+    settings.database_enabled = False
+
+    yield
+
+    settings.database_enabled = original_value
+
 
 client = create_authenticated_client()
 
@@ -146,6 +164,8 @@ def test_human_can_correct_ai_classification():
         text="Water pipeline is leaking",
     )
 
+    assert response.status_code == 200
+
     issue_id = response.json()["issue_id"]
 
     response = client.post(
@@ -184,26 +204,29 @@ def test_cross_tenant_issue_access_is_denied():
         citizen_id="citizen-a",
     )
 
+    assert response.status_code == 200
+
     issue_id = response.json()["issue_id"]
 
     response = client.get(
-        f"/api/v1/citizen/issues/{issue_id}"
-        "?tenant_id=tenant-b"
+        f"/api/v1/citizen/issues/{issue_id}?tenant_id=tenant-b"
     )
 
     assert response.status_code == 403
 
 
 def test_issue_list_is_tenant_isolated():
-    create_issue(
+    first = create_issue(
         tenant_id="tenant-a",
         citizen_id="citizen-a",
     )
-
-    create_issue(
+    second = create_issue(
         tenant_id="tenant-b",
         citizen_id="citizen-b",
     )
+
+    assert first.status_code == 200
+    assert second.status_code == 200
 
     response = client.get(
         "/api/v1/citizen/issues?tenant_id=tenant-a"
@@ -236,9 +259,10 @@ def test_cluster_suggestion_by_category_location_and_text():
         location=location,
     )
 
+    assert first.status_code == 200
     first_id = first.json()["issue_id"]
 
-    client.post(
+    classified_first = client.post(
         "/api/v1/citizen/issues/classify?tenant_id=tenant-1",
         json={
             "issue_id": first_id,
@@ -249,34 +273,37 @@ def test_cluster_suggestion_by_category_location_and_text():
         },
     )
 
+    assert classified_first.status_code == 200
+
+    second_location = {
+        "latitude": 22.7200,
+        "longitude": 75.8580,
+    }
+
     second = create_issue(
         citizen_id="citizen-102",
         text="Large pothole on main road near market",
-        location={
-            "latitude": 22.7200,
-            "longitude": 75.8580,
-        },
+        location=second_location,
     )
 
+    assert second.status_code == 200
     second_id = second.json()["issue_id"]
 
-    client.post(
+    classified_second = client.post(
         "/api/v1/citizen/issues/classify?tenant_id=tenant-1",
         json={
             "issue_id": second_id,
             "category": "road",
-            "location": {
-                "latitude": 22.7200,
-                "longitude": 75.8580,
-            },
+            "location": second_location,
             "priority": "high",
             "corrected_by": "operator-1",
         },
     )
 
+    assert classified_second.status_code == 200
+
     response = client.post(
-        "/api/v1/citizen/clusters/suggestions"
-        "?tenant_id=tenant-1",
+        "/api/v1/citizen/clusters/suggestions?tenant_id=tenant-1",
         json={
             "issue_id": first_id,
         },
@@ -293,17 +320,17 @@ def test_cluster_suggestion_by_category_location_and_text():
 
 
 def test_create_and_confirm_cluster():
-    first = create_issue(
+    response = create_issue(
         citizen_id="citizen-201",
         text="Garbage not collected",
     )
 
-    first_id = first.json()["issue_id"]
+    assert response.status_code == 200
+    first_id = response.json()["issue_id"]
 
     response = client.post(
         "/api/v1/citizen/clusters"
-        "?tenant_id=tenant-1"
-        f"&issue_id={first_id}",
+        f"?tenant_id=tenant-1&issue_id={first_id}",
         json={
             "cluster_id": "temporary",
             "confirmed_by": "operator-1",
@@ -325,21 +352,21 @@ def test_distinct_citizen_count():
         text="Street light is broken",
     )
 
+    assert issue.status_code == 200
     issue_id = issue.json()["issue_id"]
 
     cluster = client.post(
         "/api/v1/citizen/clusters"
-        "?tenant_id=tenant-1"
-        f"&issue_id={issue_id}",
+        f"?tenant_id=tenant-1&issue_id={issue_id}",
         json={
             "cluster_id": "temporary",
             "confirmed_by": "operator-1",
         },
     )
 
+    assert cluster.status_code == 200
     cluster_id = cluster.json()["cluster_id"]
 
-    # Same citizen reports again.
     response = client.post(
         f"/api/v1/citizen/clusters/{cluster_id}/confirm"
         "?tenant_id=tenant-1",
@@ -351,10 +378,8 @@ def test_distinct_citizen_count():
 
     assert response.status_code == 200
 
-    # Verify the cluster itself remains tenant-isolated and valid.
     cluster_response = client.get(
-        f"/api/v1/citizen/clusters/{cluster_id}"
-        "?tenant_id=tenant-1"
+        f"/api/v1/citizen/clusters/{cluster_id}?tenant_id=tenant-1"
     )
 
     assert cluster_response.status_code == 200

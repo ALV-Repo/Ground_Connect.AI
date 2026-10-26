@@ -5,4 +5,7 @@ __pycache__/
 venv/
 .env
 *.log
+*.dump
 .auth_data/
+# Local authorization audit data
+.audit_data/

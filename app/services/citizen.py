@@ -5,6 +5,9 @@ from math import radians, sin, cos, sqrt, atan2
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+from app.core.config import settings
+from app.repositories.citizen_repository import citizen_repository
+
 from app.schemas.citizen import (
     CitizenIssueCreateRequest,
     CitizenIssueClassificationRequest,
@@ -176,59 +179,58 @@ class CitizenService:
         *,
         request: CitizenIssueCreateRequest,
     ) -> Dict[str, Any]:
-        """
-        CIT-01:
-        Accept text, voice, photo, video and location.
+        """Create an issue; persist its submission when PostgreSQL is enabled."""
+        request.validate_submission_content()
 
-        A voice-only submission is valid.
-        """
-
-        if not request.text and not request.media:
-            raise ValueError(
-                "Issue requires text or at least one media attachment"
-            )
-
-        issue_id = self._new_id("issue")
         now = self._now()
+        location = request.location.model_dump() if request.location else None
+        media = [item.model_dump() for item in request.media]
+        consent = request.consent.model_dump(mode="json")
+
+        if settings.database_enabled:
+            saved = citizen_repository.create_submission(
+                tenant_id=request.tenant_id,
+                citizen_id=request.citizen_id,
+                text=request.text,
+                consent=consent,
+                media=media,
+                latitude=location["latitude"] if location else None,
+                longitude=location["longitude"] if location else None,
+            )
+            issue_id = str(saved["id"])
+            reference_number = saved["ref_number"]
+            created_at = saved["submitted_at"]
+        else:
+            issue_id = self._new_id("issue")
+            reference_number = self._reference_number()
+            created_at = now
 
         issue = {
             "issue_id": issue_id,
-            "reference_number": self._reference_number(),
+            "reference_number": reference_number,
             "tenant_id": request.tenant_id,
             "citizen_id": request.citizen_id,
             "text": request.text,
-            "media": [
-                media.model_dump()
-                for media in request.media
-            ],
-            "location": (
-                request.location.model_dump()
-                if request.location
-                else None
-            ),
-            "consent": request.consent.model_dump(),
+            "media": media,
+            "location": location,
+            "consent": consent,
             "ai_proposal": None,
             "category": None,
             "priority": None,
             "classification_status": "pending_human_review",
             "cluster_id": None,
-            "created_at": now,
-            "updated_at": now,
+            "created_at": created_at,
+            "updated_at": created_at,
             "history": [
                 {
                     "action": "created",
                     "actor": request.citizen_id,
-                    "timestamp": now,
+                    "timestamp": created_at,
                 }
             ],
         }
 
-        self._issues[issue_id] = issue
-
-        issue["ai_proposal"] = self._generate_ai_proposal(
-            issue
-        )
-
+        issue["ai_proposal"] = self._generate_ai_proposal(issue)
         issue["history"].append(
             {
                 "action": "ai_proposal_created",
@@ -236,7 +238,8 @@ class CitizenService:
                 "timestamp": self._now(),
             }
         )
-
+        # Keep current read/classification/clustering methods compatible.
+        self._issues[issue_id] = issue
         return dict(issue)
 
     # =========================================================
