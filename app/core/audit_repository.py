@@ -1,3 +1,4 @@
+
 from __future__ import annotations
 
 import json
@@ -11,11 +12,40 @@ class AuditRepository:
 
     def save_record(self, record: dict[str, Any]) -> None:
         """Insert or update one audit decision record."""
+
+        required_fields = (
+            "record_id",
+            "timestamp",
+            "subject_id",
+            "action",
+            "resource_type",
+            "resource_id",
+            "decision",
+            "reason",
+            "rules_evaluated",
+            "failing_rule",
+            "tenant_id",
+            "branch_id",
+            "correlation_id",
+            "source",
+        )
+
+        missing_fields = [
+            field for field in required_fields if field not in record
+        ]
+        if missing_fields:
+            raise ValueError(
+                f"Missing audit record fields: {', '.join(missing_fields)}"
+            )
+
+        decision = record["decision"]
+        if decision not in ("ALLOW", "DENY"):
+            raise ValueError("decision must be 'ALLOW' or 'DENY'")
+
         with get_db_connection() as connection:
             connection.execute(
                 """
-                INSERT INTO audit_state.authorization_decisions
-                (
+                INSERT INTO audit_state.authorization_decisions (
                     record_id,
                     timestamp,
                     subject_id,
@@ -58,7 +88,7 @@ class AuditRepository:
                     record["action"],
                     record["resource_type"],
                     record["resource_id"],
-                    record["decision"],
+                    decision,
                     record["reason"],
                     json.dumps(record["rules_evaluated"]),
                     record["failing_rule"],
@@ -71,7 +101,8 @@ class AuditRepository:
             connection.commit()
 
     def get_record(self, record_id: str) -> dict[str, Any] | None:
-        """Load one audit record by ID."""
+        """Load one audit decision by its ID."""
+
         with get_db_connection() as connection:
             row = connection.execute(
                 """
@@ -110,42 +141,35 @@ class AuditRepository:
         branch_id: str | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
-        """Query audit records using optional filters."""
+        """List audit records using optional filters."""
+
+        if limit < 1 or limit > 1000:
+            raise ValueError("limit must be between 1 and 1000")
+
+        if decision is not None and decision not in ("ALLOW", "DENY"):
+            raise ValueError("decision must be 'ALLOW' or 'DENY'")
+
+        filters = {
+            "subject_id": subject_id,
+            "action": action,
+            "resource_type": resource_type,
+            "resource_id": resource_id,
+            "decision": decision,
+            "tenant_id": tenant_id,
+            "branch_id": branch_id,
+        }
+
         conditions: list[str] = []
         parameters: list[Any] = []
 
-        if subject_id is not None:
-            conditions.append("subject_id = %s")
-            parameters.append(subject_id)
+        for column, value in filters.items():
+            if value is not None:
+                conditions.append(f"{column} = %s")
+                parameters.append(value)
 
-        if action is not None:
-            conditions.append("action = %s")
-            parameters.append(action)
-
-        if resource_type is not None:
-            conditions.append("resource_type = %s")
-            parameters.append(resource_type)
-
-        if resource_id is not None:
-            conditions.append("resource_id = %s")
-            parameters.append(resource_id)
-
-        if decision is not None:
-            conditions.append("decision = %s")
-            parameters.append(decision)
-
-        if tenant_id is not None:
-            conditions.append("tenant_id = %s")
-            parameters.append(tenant_id)
-
-        if branch_id is not None:
-            conditions.append("branch_id = %s")
-            parameters.append(branch_id)
-
-        where_clause = ""
-
-        if conditions:
-            where_clause = "WHERE " + " AND ".join(conditions)
+        where_clause = (
+            "WHERE " + " AND ".join(conditions) if conditions else ""
+        )
 
         query = f"""
             SELECT
@@ -174,13 +198,20 @@ class AuditRepository:
         with get_db_connection() as connection:
             rows = connection.execute(query, parameters).fetchall()
 
-        return [
-            self._row_to_record(row)
-            for row in rows
-        ]
+        return [self._row_to_record(row) for row in rows]
 
-    def clear(self) -> None:
-        """Delete all audit records. Intended for tests/development."""
+    def clear(self, *, allow_test_cleanup: bool = False) -> None:
+        """
+        Clear audit records only when explicitly enabled for test cleanup.
+
+        Do not use this method against production audit data.
+        """
+        if not allow_test_cleanup:
+            raise PermissionError(
+                "Audit deletion is disabled. "
+                "Use a dedicated test database for test cleanup."
+            )
+
         with get_db_connection() as connection:
             connection.execute(
                 "DELETE FROM audit_state.authorization_decisions"
@@ -190,6 +221,11 @@ class AuditRepository:
     @staticmethod
     def _row_to_record(row: Any) -> dict[str, Any]:
         """Convert a PostgreSQL row into an audit record."""
+
+        rules_evaluated = row[8]
+        if isinstance(rules_evaluated, str):
+            rules_evaluated = json.loads(rules_evaluated)
+
         return {
             "record_id": row[0],
             "timestamp": float(row[1]),
@@ -199,7 +235,7 @@ class AuditRepository:
             "resource_id": row[5],
             "decision": row[6],
             "reason": row[7],
-            "rules_evaluated": row[8] or [],
+            "rules_evaluated": rules_evaluated or [],
             "failing_rule": row[9],
             "tenant_id": row[10],
             "branch_id": row[11],

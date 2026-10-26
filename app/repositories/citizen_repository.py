@@ -197,7 +197,7 @@ class CitizenRepository:
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s,
                         CASE
-                            WHEN %s IS NULL THEN NULL
+                            WHEN %s::double precision IS NULL THEN NULL
                             ELSE ST_SetSRID(
                                 ST_MakePoint(%s, %s), 4326
                             )::geography
