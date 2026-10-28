@@ -27,6 +27,16 @@ class TaskCreateRequest(BaseModel):
         max_length=128,
     )
 
+    creator_assignment_id: Optional[str] = Field(
+        default=None,
+        max_length=128,
+    )
+
+    assignee_node_id: Optional[str] = Field(
+        default=None,
+        max_length=128,
+    )
+
     priority: str = Field(
         default="normal",
         max_length=32,
