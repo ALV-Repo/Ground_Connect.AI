@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 from contextlib import nullcontext
 
 from psycopg.types.json import Jsonb
@@ -373,6 +373,146 @@ class TaskRepository:
             }
 
 
+    def task_action(
+        self,
+        *,
+        task_id: UUID,
+        tenant_id: str,
+        action: str,
+        requested_by: UUID,
+        reason: str | None = None,
+        connection=None,
+    ) -> dict[str, Any]:
+        """Persist a supported task lifecycle action and its history."""
+        action = action.strip().lower()
+        transitions = {
+            "start": ("In_Progress", {"Assigned", "Accepted", "In_Progress"}),
+            "complete": ("Completed", {"Assigned", "Accepted", "In_Progress", "Blocked"}),
+            "cancel": ("Rejected", {"Assigned", "Accepted", "In_Progress", "Blocked"}),
+            "reopen": ("Assigned", {"Completed", "Rejected"}),
+        }
+
+        if action in {"assign", "unassign"}:
+            raise ValueError(
+                "Assign and unassign are not supported in PostgreSQL mode "
+                "because tasks.assignee_id and tasks.assignee_node_id are required."
+            )
+        if action not in transitions:
+            raise ValueError("Unsupported task action.")
+
+        if connection is None:
+            with get_db_connection() as db_connection:
+                with db_connection.transaction():
+                    return self.task_action(
+                        task_id=task_id,
+                        tenant_id=tenant_id,
+                        action=action,
+                        requested_by=requested_by,
+                        reason=reason,
+                        connection=db_connection,
+                    )
+
+        organization_id = self._resolve_organization(connection, tenant_id)
+        task_cursor = connection.execute(
+            """
+            SELECT *
+            FROM tasks_field_reports.tasks
+            WHERE id = %s AND organization_id = %s
+            FOR UPDATE
+            """,
+            (task_id, organization_id),
+        )
+        task_row = task_cursor.fetchone()
+        if task_row is None:
+            raise KeyError("Task not found.")
+        task = dict(zip([c.name for c in task_cursor.description], task_row))
+
+        actor = connection.execute(
+            """
+            SELECT na.id
+            FROM identity_authentication_sessions.users u
+            JOIN hierarchy_bitemporal_model.node_assignments na
+              ON na.user_id = u.id
+             AND na.organization_id = u.organization_id
+            WHERE u.id = %s
+              AND u.organization_id = %s
+              AND u.lifecycle_status = 'Active'
+              AND na.valid_from <= NOW()
+              AND (na.valid_to IS NULL OR na.valid_to > NOW())
+            ORDER BY na.valid_from DESC, na.id
+            LIMIT 1
+            """,
+            (requested_by, organization_id),
+        ).fetchone()
+        if actor is None:
+            raise PermissionError(
+                "Actor must have an active assignment in this tenant."
+            )
+        actor_assignment_id = actor[0]
+
+        target_status, allowed_statuses = transitions[action]
+        old_status = task["status"]
+        if old_status not in allowed_statuses:
+            raise ValueError(
+                f"Action '{action}' is not allowed from status '{old_status}'."
+            )
+
+        new_status = old_status if target_status is None else target_status
+        updated = connection.execute(
+            """
+            UPDATE tasks_field_reports.tasks
+            SET status = %s,
+                completed_at = CASE
+                    WHEN %s = 'Completed' THEN NOW()
+                    WHEN %s <> 'Completed' THEN NULL
+                    ELSE completed_at
+                END,
+                rejected_at = CASE
+                    WHEN %s = 'Rejected' THEN NOW()
+                    WHEN %s <> 'Rejected' THEN NULL
+                    ELSE rejected_at
+                END,
+                updated_at = NOW()
+            WHERE id = %s AND organization_id = %s
+            RETURNING *
+            """,
+            (
+                new_status, new_status, new_status,
+                new_status, new_status, task_id, organization_id,
+            ),
+        )
+        updated_row = updated.fetchone()
+        updated_task = dict(
+            zip([c.name for c in updated.description], updated_row)
+        )
+
+        history_reason = f"action={action}"
+        if reason:
+            history_reason += f"; {reason}"
+
+        connection.execute(
+            """
+            INSERT INTO tasks_field_reports.task_history (
+                organization_id, task_id, from_status, to_status,
+                actor_id, actor_assignment_id, reason
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                organization_id, task_id, old_status, new_status,
+                requested_by, actor_assignment_id, history_reason,
+            ),
+        )
+
+        return {
+            "success": True,
+            "task_id": str(task_id),
+            "action": action,
+            "status": new_status,
+            "assignee_id": str(updated_task["assignee_id"]),
+            "history_persisted": True,
+        }
+
     def statistics(
         self,
         *,
@@ -436,5 +576,230 @@ class TaskRepository:
 
             return result
 
+
+
+    def add_evidence(
+        self,
+        *,
+        tenant_id: str,
+        task_id: UUID,
+        evidence_id: UUID,
+        uploaded_by: UUID,
+        sha256: str,
+        storage_reference: str,
+        content_type: str,
+        connection=None,
+    ) -> dict[str, Any]:
+        """Persist a field report and its evidence atomically."""
+        if not sha256.strip():
+            raise ValueError("sha256 is required in PostgreSQL mode.")
+        if not storage_reference.strip():
+            raise ValueError("storage_reference is required in PostgreSQL mode.")
+        if not content_type or "/" not in content_type:
+            raise ValueError("A valid content_type is required.")
+
+        if content_type.startswith("image/"):
+            media_type = "photo"
+        elif content_type.startswith("video/"):
+            media_type = "video"
+        elif content_type.startswith("audio/"):
+            media_type = "audio"
+        else:
+            media_type = "document"
+
+        if connection is None:
+            with get_db_connection() as db_connection:
+                with db_connection.transaction():
+                    return self.add_evidence(
+                        tenant_id=tenant_id,
+                        task_id=task_id,
+                        evidence_id=evidence_id,
+                        uploaded_by=uploaded_by,
+                        sha256=sha256,
+                        storage_reference=storage_reference,
+                        content_type=content_type,
+                        connection=db_connection,
+                    )
+
+        with connection.transaction():
+            organization_id = self._resolve_organization(
+                connection, tenant_id
+            )
+
+            task_cursor = connection.execute(
+                """
+                SELECT id, assignee_id, assignee_node_id
+                FROM tasks_field_reports.tasks
+                WHERE id = %s AND organization_id = %s
+                """,
+                (task_id, organization_id),
+            )
+            task = task_cursor.fetchone()
+            if task is None:
+                raise KeyError("Task not found.")
+
+            actor = connection.execute(
+                """
+                SELECT na.id
+                FROM identity_authentication_sessions.users u
+                JOIN hierarchy_bitemporal_model.node_assignments na
+                  ON na.user_id = u.id
+                 AND na.organization_id = u.organization_id
+                WHERE u.id = %s
+                  AND u.organization_id = %s
+                  AND u.lifecycle_status = 'Active'
+                  AND na.valid_from <= NOW()
+                  AND (na.valid_to IS NULL OR na.valid_to > NOW())
+                ORDER BY na.valid_from DESC, na.id
+                LIMIT 1
+                """,
+                (uploaded_by, organization_id),
+            ).fetchone()
+            if actor is None:
+                raise PermissionError(
+                    "Uploader must have an active assignment in this tenant."
+                )
+
+            report_id = uuid4()
+            report_cursor = connection.execute(
+                """
+                INSERT INTO tasks_field_reports.field_reports (
+                    id, organization_id, task_id, reporter_id,
+                    reporter_assignment_id, text, completion_pct,
+                    integrity_status, integrity_flags, attested_count,
+                    unattested_count, flagged_count, submitted_at
+                )
+                VALUES (
+                    %s, %s, %s, %s, %s, NULL, NULL,
+                    'unverified', '[]'::jsonb, 0, 1, 0, NOW()
+                )
+                RETURNING id, submitted_at
+                """,
+                (
+                    report_id, organization_id, task_id,
+                    uploaded_by, actor[0],
+                ),
+            )
+            report_cursor.fetchone()
+
+            media_cursor = connection.execute(
+                """
+                INSERT INTO tasks_field_reports.evidence_media (
+                    id, organization_id, report_id, media_type,
+                    capture_method, trust_class, object_storage_key,
+                    media_hash, exif_stripped, attestation_status,
+                    coherence_flags, tampered, uploaded_at
+                )
+                VALUES (
+                    %s, %s, %s, %s, 'gallery_upload', 'unattested',
+                    %s, %s, FALSE, 'unattested', '[]'::jsonb,
+                    FALSE, NOW()
+                )
+                RETURNING id, media_type, object_storage_key,
+                          media_hash, uploaded_at
+                """,
+                (
+                    evidence_id, organization_id, report_id,
+                    media_type, storage_reference, sha256,
+                ),
+            )
+            media = media_cursor.fetchone()
+
+            return {
+                "evidence_id": str(media[0]),
+                "report_id": str(report_id),
+                "task_id": str(task_id),
+                "uploaded_by": str(uploaded_by),
+                "content_type": content_type,
+                "sha256": media[3],
+                "storage_reference": media[2],
+                "created_at": media[4],
+                "verified": False,
+                "verification_persisted": False,
+            }
+
+    def list_evidence(
+        self, *, tenant_id: str, task_id: UUID
+    ) -> list[dict[str, Any]]:
+        with get_db_connection() as connection:
+            organization_id = self._resolve_organization(
+                connection, tenant_id
+            )
+            cursor = connection.execute(
+                """
+                SELECT em.id AS evidence_id, fr.id AS report_id,
+                       fr.task_id, fr.reporter_id AS uploaded_by,
+                       em.media_type, em.media_hash AS sha256,
+                       em.object_storage_key AS storage_reference,
+                       em.uploaded_at AS created_at,
+                       em.attestation_status, em.trust_class
+                FROM tasks_field_reports.field_reports fr
+                JOIN tasks_field_reports.evidence_media em
+                  ON em.report_id = fr.id
+                 AND em.organization_id = fr.organization_id
+                WHERE fr.organization_id = %s AND fr.task_id = %s
+                ORDER BY em.uploaded_at DESC, em.id
+                """,
+                (organization_id, task_id),
+            )
+            columns = [item.name for item in cursor.description]
+            return [
+                dict(zip(columns, row)) for row in cursor.fetchall()
+            ]
+
+    def get_evidence(
+        self, *, tenant_id: str, task_id: UUID, evidence_id: UUID
+    ) -> dict[str, Any] | None:
+        with get_db_connection() as connection:
+            organization_id = self._resolve_organization(
+                connection, tenant_id
+            )
+            cursor = connection.execute(
+                """
+                SELECT em.id AS evidence_id, fr.id AS report_id,
+                       fr.task_id, fr.reporter_id AS uploaded_by,
+                       em.media_type, em.media_hash AS sha256,
+                       em.object_storage_key AS storage_reference,
+                       em.uploaded_at AS created_at,
+                       em.attestation_status, em.trust_class
+                FROM tasks_field_reports.field_reports fr
+                JOIN tasks_field_reports.evidence_media em
+                  ON em.report_id = fr.id
+                 AND em.organization_id = fr.organization_id
+                WHERE fr.organization_id = %s
+                  AND fr.task_id = %s
+                  AND em.id = %s
+                LIMIT 1
+                """,
+                (organization_id, task_id, evidence_id),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            columns = [item.name for item in cursor.description]
+            return dict(zip(columns, row))
+
+    def verify_evidence_hash(
+        self, *, tenant_id: str, task_id: UUID,
+        evidence_id: UUID, expected_sha256: str,
+    ) -> dict[str, Any] | None:
+        evidence = self.get_evidence(
+            tenant_id=tenant_id, task_id=task_id,
+            evidence_id=evidence_id,
+        )
+        if evidence is None:
+            return None
+
+        actual = evidence.get("sha256")
+        matched = bool(actual) and actual == expected_sha256
+        return {
+            "success": True,
+            "evidence_id": str(evidence_id),
+            "verified": matched,
+            "actual_sha256": actual,
+            "expected_sha256": expected_sha256,
+            "verification_persisted": False,
+            "note": "Hash comparison only; verification audit is not stored by the current schema.",
+        }
 
 task_repository = TaskRepository()

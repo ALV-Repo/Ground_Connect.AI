@@ -497,11 +497,36 @@ def task_action(
     Execute a task lifecycle action.
     """
     try:
-        return task_service.task_action(
-            task_id=task_id,
+        if not settings.database_enabled:
+            return task_service.task_action(
+                task_id=task_id,
+                tenant_id=tenant_id,
+                action=action,
+                requested_by=requested_by,
+                reason=reason,
+            )
+
+        normalized_action = action.strip().lower()
+        if normalized_action in {"assign", "unassign"}:
+            raise ValueError(
+                f"Action '{normalized_action}' is not supported in PostgreSQL mode "
+                "with the current schema and implementation."
+            )
+
+        try:
+            parsed_task_id = UUID(task_id)
+            parsed_requested_by = UUID(requested_by)
+        except (ValueError, TypeError) as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="task_id and requested_by must be valid UUIDs in PostgreSQL mode.",
+            ) from exc
+
+        return task_repository.task_action(
+            task_id=parsed_task_id,
             tenant_id=tenant_id,
-            action=action,
-            requested_by=requested_by,
+            action=normalized_action,
+            requested_by=parsed_requested_by,
             reason=reason,
         )
 
@@ -533,11 +558,42 @@ def task_action(
 def add_evidence(
     task_id: str,
     payload: EvidenceCreateRequest,
+    tenant_id: Optional[str] = Query(None),
 ):
-    """
-    Add evidence to a task.
-    """
+    """Add evidence using PostgreSQL or in-memory storage."""
     try:
+        if payload.task_id != task_id:
+            raise HTTPException(
+                status_code=400,
+                detail="Path task_id must match payload task_id.",
+            )
+
+        if settings.database_enabled:
+            if not tenant_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="tenant_id query parameter is required in PostgreSQL mode.",
+                )
+            try:
+                parsed_task_id = UUID(task_id)
+                parsed_evidence_id = UUID(payload.evidence_id)
+                parsed_uploader_id = UUID(payload.uploaded_by)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="task_id, evidence_id and uploaded_by must be UUIDs.",
+                ) from exc
+
+            return task_repository.add_evidence(
+                tenant_id=tenant_id,
+                task_id=parsed_task_id,
+                evidence_id=parsed_evidence_id,
+                uploaded_by=parsed_uploader_id,
+                sha256=payload.sha256 or "",
+                storage_reference=payload.storage_reference or "",
+                content_type=payload.content_type,
+            )
+
         return task_service.add_evidence(
             evidence_id=payload.evidence_id,
             task_id=task_id,
@@ -549,72 +605,95 @@ def add_evidence(
             storage_reference=payload.storage_reference,
             metadata=payload.metadata,
         )
-
+    except HTTPException:
+        raise
     except KeyError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=str(exc),
-        ) from exc
-
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except PermissionError as exc:
-        raise HTTPException(
-            status_code=403,
-            detail=str(exc),
-        ) from exc
-
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=str(exc),
-        ) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/{task_id}/evidence")
 def list_evidence(
     task_id: str,
+    tenant_id: Optional[str] = Query(None),
 ):
-    """
-    List evidence attached to a task.
-    """
+    """List evidence attached to a task."""
     try:
-        return task_service.list_evidence(
-            task_id=task_id,
-        )
-
+        if settings.database_enabled:
+            if not tenant_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="tenant_id query parameter is required in PostgreSQL mode.",
+                )
+            try:
+                parsed_task_id = UUID(task_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400, detail="task_id must be a UUID."
+                ) from exc
+            return task_repository.list_evidence(
+                tenant_id=tenant_id, task_id=parsed_task_id
+            )
+        return task_service.list_evidence(task_id=task_id)
+    except HTTPException:
+        raise
     except KeyError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=str(exc),
-        ) from exc
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/{task_id}/evidence/{evidence_id}")
 def get_evidence(
     task_id: str,
     evidence_id: str,
+    tenant_id: Optional[str] = Query(None),
 ):
-    """
-    Get a specific evidence record.
-    """
+    """Get evidence for a task."""
     try:
-        evidence = task_service.get_evidence(
-            evidence_id=evidence_id,
-            task_id=task_id,
-        )
+        if settings.database_enabled:
+            if not tenant_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="tenant_id query parameter is required in PostgreSQL mode.",
+                )
+            try:
+                parsed_task_id = UUID(task_id)
+                parsed_evidence_id = UUID(evidence_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="task_id and evidence_id must be UUIDs.",
+                ) from exc
+            evidence = task_repository.get_evidence(
+                tenant_id=tenant_id,
+                task_id=parsed_task_id,
+                evidence_id=parsed_evidence_id,
+            )
+        else:
+            if not tenant_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="tenant_id query parameter is required.",
+                )
+            evidence = task_service.get_evidence(
+                evidence_id=evidence_id, tenant_id=tenant_id
+            )
+            if evidence is not None and evidence.get("task_id") != task_id:
+                evidence = None
 
         if evidence is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Evidence not found",
-            )
-
+            raise HTTPException(status_code=404, detail="Evidence not found")
         return evidence
-
+    except HTTPException:
+        raise
     except KeyError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=str(exc),
-        ) from exc
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/{task_id}/evidence/{evidence_id}/verify")
@@ -623,42 +702,58 @@ def verify_evidence(
     evidence_id: str,
     verified_by: str = Query(...),
     expected_sha256: Optional[str] = Query(None),
+    tenant_id: Optional[str] = Query(None),
 ):
-    """
-    Verify evidence integrity.
-    """
+    """Compare hashes; PostgreSQL verification audit is not persisted."""
     try:
-        evidence = task_service.get_evidence(
-            evidence_id=evidence_id,
-            task_id=task_id,
-        )
-
-        if evidence is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Evidence not found",
+        if settings.database_enabled:
+            if not tenant_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="tenant_id query parameter is required in PostgreSQL mode.",
+                )
+            if not expected_sha256:
+                raise HTTPException(
+                    status_code=400,
+                    detail="expected_sha256 is required in PostgreSQL mode.",
+                )
+            try:
+                parsed_task_id = UUID(task_id)
+                parsed_evidence_id = UUID(evidence_id)
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=400,
+                    detail="task_id and evidence_id must be UUIDs.",
+                ) from exc
+            result = task_repository.verify_evidence_hash(
+                tenant_id=tenant_id,
+                task_id=parsed_task_id,
+                evidence_id=parsed_evidence_id,
+                expected_sha256=expected_sha256,
             )
+            if result is None:
+                raise HTTPException(status_code=404, detail="Evidence not found")
+            return result
 
+        if not tenant_id:
+            raise HTTPException(
+                status_code=400, detail="tenant_id query parameter is required."
+            )
+        evidence = task_service.get_evidence(
+            evidence_id=evidence_id, tenant_id=tenant_id
+        )
+        if evidence is None or evidence.get("task_id") != task_id:
+            raise HTTPException(status_code=404, detail="Evidence not found")
         return task_service.verify_evidence(
             evidence_id=evidence_id,
             verified_by=verified_by,
             expected_sha256=expected_sha256,
         )
-
+    except HTTPException:
+        raise
     except KeyError as exc:
-        raise HTTPException(
-            status_code=404,
-            detail=str(exc),
-        ) from exc
-
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     except PermissionError as exc:
-        raise HTTPException(
-            status_code=403,
-            detail=str(exc),
-        ) from exc
-
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail=str(exc),
-        ) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc

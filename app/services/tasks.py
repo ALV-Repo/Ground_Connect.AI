@@ -450,6 +450,7 @@ class TaskService:
         content_type: Optional[str] = None,
         size_bytes: int = 0,
         sha256: Optional[str] = None,
+        storage_reference: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
 
@@ -486,6 +487,7 @@ class TaskService:
             "content_type": content_type,
             "size_bytes": size_bytes,
             "sha256": sha256,
+            "storage_reference": storage_reference,
             "metadata": dict(metadata or {}),
             "created_at": now,
             "verified": False,
@@ -496,6 +498,22 @@ class TaskService:
         self._evidence[evidence_id] = evidence
 
         return dict(evidence)
+
+    def list_evidence(
+        self,
+        *,
+        task_id: str,
+    ) -> List[Dict[str, Any]]:
+        task = self._tasks.get(task_id)
+        if task is None:
+            raise KeyError("Task not found")
+
+        return [
+            dict(evidence)
+            for evidence in self._evidence.values()
+            if evidence["task_id"] == task_id
+            and evidence["tenant_id"] == task["tenant_id"]
+        ]
 
     # =========================================================
     # Evidence Verification
