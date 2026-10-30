@@ -107,16 +107,17 @@ function reVerifyReferences(text, ctx) {
 // ═══════════════════════════════════════════════════════════════════════
 async function callAI(feature, userMessage, ctx, conversationHistory = []) {
   const systemPrompt = buildSystemPrompt(feature, ctx)
-  const sanitizedMsg = sanitizeInput(userMessage) // AIB-03
+  const sanitizedMsg = sanitizeInput(userMessage)
 
   const messages = [
     ...conversationHistory,
-    { role: 'user', content: sanitizedMsg }
+    { role: 'user', content: sanitizedMsg },
   ]
 
-  // Retry logic: attempt up to 2 retries on transient errors before falling back (AID-05)
+  // AID-05: Initial attempt plus two retries.
   let lastError = null
-  for (let attempt = 0; attempt < 2; attempt++) {
+
+  for (let attempt = 0; attempt < 3; attempt++) {
     try {
       const res = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
@@ -131,32 +132,54 @@ async function callAI(feature, userMessage, ctx, conversationHistory = []) {
           max_tokens: 1000,
           system: systemPrompt,
           messages,
-        })
+        }),
       })
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: { message: `HTTP ${res.status}` } }))
-        throw new Error(`AI_SERVICE_ERROR: ${err.error?.message || res.statusText}`)
+        const err = await res.json().catch(() => ({
+          error: { message: `HTTP ${res.status}` },
+        }))
+
+        throw new Error(
+          `AI_SERVICE_ERROR: ${err.error?.message || res.statusText}`
+        )
       }
 
       const data = await res.json()
-      if (data.error) throw new Error(`AI_SERVICE_ERROR: ${data.error.message}`)
 
-      const rawText = data.content?.find(b => b.type === 'text')?.text || ''
+      if (data.error) {
+        throw new Error(`AI_SERVICE_ERROR: ${data.error.message}`)
+      }
 
-  // AIB-04: Re-verify every record reference before returning
-  const verifiedText = reVerifyReferences(rawText, ctx)
+      const rawText =
+        data.content?.find((block) => block.type === 'text')?.text || ''
 
-  return {
-    text: verifiedText,
-    inputTokens: data.usage?.input_tokens || 0,
-    outputTokens: data.usage?.output_tokens || 0,
-    model: data.model,
-    // AIC-03: coverage metadata always returned
-    coverage: ctx.coverage,
-    evidenceMix: ctx.evidenceMix,
-    dataFreshness: ctx.dataFreshness,
+      // AIB-04: Re-verify record references before returning.
+      const verifiedText = reVerifyReferences(rawText, ctx)
+
+      return {
+        text: verifiedText,
+        inputTokens: data.usage?.input_tokens || 0,
+        outputTokens: data.usage?.output_tokens || 0,
+        model: data.model,
+        // AIC-03: Always return coverage metadata.
+        coverage: ctx.coverage,
+        evidenceMix: ctx.evidenceMix,
+        dataFreshness: ctx.dataFreshness,
+      }
+    } catch (error) {
+      lastError = error
+
+      if (attempt < 2) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, 500 * (attempt + 1))
+        )
+      }
+    }
   }
+
+  // Let the calling component display its fallback.
+  throw lastError || new Error('AI_SERVICE_ERROR: Request failed')
 }
 
 function buildSystemPrompt(feature, ctx) {

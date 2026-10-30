@@ -227,8 +227,8 @@ export function GlobalSearch() {
                   <button key={r.label} className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-pointer w-full text-left" aria-label={r.label}>
                     <span className="badge-primary badge text-[10px]">{r.type}</span>
                     <div><p className="text-sm font-medium text-slate-800 dark:text-slate-200">{r.label}</p><p className="text-xs text-slate-400">{r.sub}</p></div>
-                  </div>
-                ))}
+</button>
+))}
               </div>
             ) : debouncedQ.length > 1 ? (
               <div className="px-4 py-8 text-center text-sm text-slate-400">No results for &ldquo;{debouncedQ}&rdquo;</div>
