@@ -409,17 +409,90 @@ function MessagesPage({ accent }) {
   const [msgType, setMsgType] = useState('Announcement')
   const [target, setTarget] = useState('Entire organisation')
   const [showPreview, setShowPreview] = useState(false)
+  const [showConfirmation, setShowConfirmation] = useState(false)
   const [selected, setSelected] = useState(null)
-  const filtered = filter==='All' ? MESSAGES : MESSAGES.filter(m=>m.type===filter)
-  const MSG_TYPES = ['Announcement','Instruction','Emergency','Information','Meeting','Document','Survey','Task-linked','Issue-linked']
-  const TARGETS = ['Entire organisation','North District','South District','East District','Zone A','Zone B','Zone C','Zone D']
-  const RESPONSE_MODES = ['None','Acknowledge only','Reply to parent','Reply up chain','Aggregated replies','Escalation']
+  const [subject, setSubject] = useState('')
+  const [body, setBody] = useState('')
+  const [smsEnabled, setSmsEnabled] = useState(true)
+  const [feedback, setFeedback] = useState('')
+  const [localMessages, setLocalMessages] = useState(MESSAGES)
+  const [formError, setFormError] = useState('')
+
+  // This map follows the sample organisation tree in src/data/index.js.
+  // Counts are derived from MEMBERS, not from the organisation-wide demo constants.
+  const TARGET_NODES = {
+    'Entire organisation': ['State HQ', 'North District', 'Zone A', 'Zone B', 'South District', 'Zone C', 'East District', 'Zone D'],
+    'North District': ['North District', 'Zone A', 'Zone B'],
+    'South District': ['South District', 'Zone C'],
+    'East District': ['East District', 'Zone D'],
+    'Zone A': ['Zone A'],
+    'Zone B': ['Zone B'],
+    'Zone C': ['Zone C'],
+    'Zone D': ['Zone D'],
+  }
+  const activeRecipients = MEMBERS.filter(member =>
+    member.status === 'active' && TARGET_NODES[target]?.includes(member.node)
+  )
+  const suspendedRecipients = MEMBERS.filter(member =>
+    member.status === 'suspended' && TARGET_NODES[target]?.includes(member.node)
+  )
+  const roleBreakdown = [
+    { key: 'leader', label: 'Leaders' },
+    { key: 'coordinator', label: 'Coordinators' },
+    { key: 'field_worker', label: 'Field workers' },
+  ].map(role => ({
+    ...role,
+    count: activeRecipients.filter(member => member.role === role.key).length,
+  }))
+  const nodeBreakdown = TARGET_NODES[target]
+    .map(node => ({ node, count: activeRecipients.filter(member => member.node === node).length }))
+    .filter(item => item.count > 0)
+  const smsEligible = activeRecipients.filter(member => Boolean(member.mobile)).length
+  const smsRate = 0.20 // Illustrative demo rate only; replace with the actual provider tariff.
+  const estimatedSmsCost = smsEnabled ? smsEligible * smsRate : 0
+  const filtered = filter === 'All' ? localMessages : localMessages.filter(message => message.type === filter)
+  const MSG_TYPES = ['Announcement', 'Instruction', 'Emergency', 'Information', 'Meeting', 'Document', 'Survey', 'Task-linked', 'Issue-linked']
+  const TARGETS = Object.keys(TARGET_NODES)
+  const RESPONSE_MODES = ['None', 'Acknowledge only', 'Reply to parent', 'Reply up chain', 'Aggregated replies', 'Escalation']
+
+  const openPreview = () => {
+    if (!subject.trim() || !body.trim()) {
+      setFormError('Enter both a subject and message body before previewing.')
+      return
+    }
+    setFormError('')
+    setShowPreview(true)
+  }
+
+  const confirmDemoSend = () => {
+    const now = new Date()
+    const newMessage = {
+      id: `DEMO-${now.getTime()}`,
+      type: msgType,
+      subject: subject.trim(),
+      from: 'Ravi Kumar (Demo)',
+      recipients: activeRecipients.length,
+      time: now.toLocaleString(),
+      status: 'demo-sent',
+      body: body.trim(),
+      priority: msgType === 'Emergency' ? 'high' : 'medium',
+      ack: msgType === 'Emergency',
+    }
+    setLocalMessages(messages => [newMessage, ...messages])
+    setShowConfirmation(false)
+    setShowPreview(false)
+    setCompose(false)
+    setFeedback(`Demo send recorded for ${activeRecipients.length} active sample recipient(s). No real message was sent.`)
+    setSubject('')
+    setBody('')
+  }
 
   return (
     <div className="space-y-4 page">
+      {feedback && <Alert type="info" onClose={() => setFeedback('')}>{feedback}</Alert>}
       <div className="flex items-center justify-between">
-        <FilterPills options={['All','Emergency','Instruction','Announcement','Survey','Information']} active={filter} onChange={setFilter}/>
-        <button onClick={()=>setCompose(o=>!o)} className="btn-primary btn-sm"><PlusCircle size={13}/>Compose</button>
+        <FilterPills options={['All', 'Emergency', 'Instruction', 'Announcement', 'Survey', 'Information']} active={filter} onChange={setFilter}/>
+        <button onClick={() => { setCompose(open => !open); setFeedback('') }} className="btn-primary btn-sm"><PlusCircle size={13}/>Compose</button>
       </div>
 
       {compose && (
@@ -427,80 +500,120 @@ function MessagesPage({ accent }) {
           <div className="text-sm font-bold text-slate-900 dark:text-white mb-4">New message</div>
           <div className="grid grid-cols-3 gap-3 mb-3">
             <div><label className="label">Message type</label>
-              <select className="select" value={msgType} onChange={e=>setMsgType(e.target.value)}>
-                {MSG_TYPES.map(t=><option key={t}>{t}</option>)}
+              <select className="select" value={msgType} onChange={event => setMsgType(event.target.value)}>
+                {MSG_TYPES.map(type => <option key={type}>{type}</option>)}
               </select>
             </div>
             <div><label className="label">Target</label>
-              <select className="select" value={target} onChange={e=>setTarget(e.target.value)}>
-                {TARGETS.map(t=><option key={t}>{t}</option>)}
+              <select className="select" value={target} onChange={event => setTarget(event.target.value)}>
+                {TARGETS.map(item => <option key={item}>{item}</option>)}
               </select>
             </div>
             <div><label className="label">Response mode</label>
-              <select className="select">{RESPONSE_MODES.map(m=><option key={m}>{m}</option>)}</select>
+              <select className="select" defaultValue="None">{RESPONSE_MODES.map(mode => <option key={mode}>{mode}</option>)}</select>
             </div>
           </div>
           <div className="grid grid-cols-3 gap-3 mb-3">
-            <div><label className="label">Forward allowed</label><select className="select"><option>No</option><option>Yes</option></select></div>
-            <div><label className="label">Download allowed</label><select className="select"><option>No</option><option>Yes</option></select></div>
+            <div><label className="label">Forward allowed</label><select className="select" defaultValue="No"><option>No</option><option>Yes</option></select></div>
+            <div><label className="label">Download allowed</label><select className="select" defaultValue="No"><option>No</option><option>Yes</option></select></div>
             <div><label className="label">Expiry</label><input className="input-sm" type="datetime-local"/></div>
           </div>
-          <input className="input mb-3" placeholder="Subjectâ€¦"/>
-          <textarea className="textarea mb-3" rows={4} placeholder="Message bodyâ€¦"/>
-          {msgType==='Emergency'&&<Alert type="danger" className="mb-3">Emergency messages bypass quiet hours, require acknowledgement from all recipients, and are separately audited.</Alert>}
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] text-slate-400">Blast-radius preview required before sending to â‰¥500 recipients</p>
+          <input className="input mb-3" placeholder="Subject…" value={subject} onChange={event => setSubject(event.target.value)} maxLength={120}/>
+          <textarea className="textarea mb-3" rows={4} placeholder="Message body…" value={body} onChange={event => setBody(event.target.value)} maxLength={2000}/>
+          {msgType === 'Emergency' && <Alert type="danger" className="mb-3">Emergency messages require acknowledgement and separate audit handling. This demo does not perform emergency delivery.</Alert>}
+          {formError && <Alert type="danger" className="mb-3">{formError}</Alert>}
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-[10px] text-slate-400">Blast-radius review is required before confirming a send.</p>
             <div className="flex gap-2">
-              <button onClick={()=>setCompose(false)} className="btn-secondary btn-sm">Cancel</button>
-              <button onClick={()=>setShowPreview(true)} className="btn-primary btn-sm"><Eye size={13}/>Preview blast radius</button>
+              <button onClick={() => { setCompose(false); setFormError('') }} className="btn-secondary btn-sm">Cancel</button>
+              <button onClick={openPreview} className="btn-primary btn-sm"><Eye size={13}/>Preview blast radius</button>
             </div>
           </div>
         </div>
       )}
 
-      <Modal open={showPreview} onClose={()=>setShowPreview(false)} title="Blast-radius preview" size="md"
-        footer={<><button className="btn-secondary btn-sm" onClick={()=>setShowPreview(false)}>Cancel</button><button className="btn-primary btn-sm">Send message</button></>}>
+      <Modal open={showPreview} onClose={() => setShowPreview(false)} title="Blast-radius preview" size="lg"
+        footer={<><button className="btn-secondary btn-sm" onClick={() => setShowPreview(false)}>Back to edit</button><button className="btn-primary btn-sm" onClick={() => setShowConfirmation(true)} disabled={activeRecipients.length === 0}>Continue to confirmation</button></>}>
         <div className="space-y-4">
-          <Alert type="warning">This preview is computed by actually evaluating the targeting query â€” not an estimate.</Alert>
-          <div className="grid grid-cols-2 gap-3">
-            <KpiCard label="Total recipients" value="12,400" deltaPos icon={Users} accent="#4f46e5"/>
-            <KpiCard label="Unreachable" value="23" deltaPos={false} icon={AlertTriangle} accent="#f43f5e" sub="Orphaned / suspended nodes"/>
+          <Alert type="warning">Demo preview calculated from the local MEMBERS sample data. It is not a live organisation-wide targeting query.</Alert>
+          <div className="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-1">
+            <div className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Message review</div>
+            <div className="text-sm font-bold text-slate-800 dark:text-slate-100">{subject}</div>
+            <div className="text-xs text-slate-500 whitespace-pre-wrap">{body}</div>
+            <div className="text-xs text-slate-500">Type: {msgType} · Target: {target}</div>
           </div>
-          <div className="space-y-2">
-            {[['North District','4,200 recipients'],['South District','3,800 recipients'],['East District','4,400 recipients']].map(([n,c])=>(
-              <div key={n} className="flex justify-between text-xs px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800">
-                <span className="font-medium text-slate-700 dark:text-slate-300">{n}</span>
-                <span className="text-slate-500">{c}</span>
+          <div className="grid grid-cols-2 gap-3">
+            <KpiCard label="Active recipients" value={activeRecipients.length.toLocaleString()} icon={Users} accent="#4f46e5" sub="From sample member records"/>
+            <KpiCard label="Excluded: suspended" value={suspendedRecipients.length.toLocaleString()} icon={AlertTriangle} accent="#f43f5e" sub="Not included in recipient count"/>
+          </div>
+
+          <section className="space-y-2">
+            <div className="text-xs font-black text-slate-700 dark:text-slate-200">Target districts / teams</div>
+            {nodeBreakdown.length ? nodeBreakdown.map(item => (
+              <div key={item.node} className="flex justify-between text-xs px-3 py-2 rounded-lg bg-slate-50 dark:bg-slate-800">
+                <span className="font-medium text-slate-700 dark:text-slate-300">{item.node}</span>
+                <span className="font-bold text-slate-600 dark:text-slate-300">{item.count} active</span>
+              </div>
+            )) : <p className="text-xs text-slate-500">No active sample members are assigned to this target.</p>}
+          </section>
+
+          <section className="space-y-2">
+            <div className="text-xs font-black text-slate-700 dark:text-slate-200">Recipient breakdown by role</div>
+            {roleBreakdown.map(role => (
+              <div key={role.key} className="flex items-center justify-between text-xs">
+                <span className="text-slate-500">{role.label}</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{role.count}</span>
               </div>
             ))}
+          </section>
+
+          <section className="space-y-2">
+            <div className="text-xs font-black text-slate-700 dark:text-slate-200">Delivery channels</div>
+            <label className="flex items-center justify-between p-3 rounded-lg border border-slate-200 dark:border-slate-700 text-xs">
+              <span><input type="checkbox" className="mr-2" checked={smsEnabled} onChange={event => setSmsEnabled(event.target.checked)}/>SMS fallback</span>
+              <span className="font-semibold">{smsEnabled ? `${smsEligible} sample numbers available` : 'Disabled'}</span>
+            </label>
+            <div className="flex justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800 text-xs"><span>Push notifications</span><span className="text-amber-600 font-semibold">Not configured</span></div>
+            <div className="flex justify-between p-3 rounded-lg bg-slate-50 dark:bg-slate-800 text-xs"><span>Email</span><span className="text-amber-600 font-semibold">Not configured</span></div>
+          </section>
+
+          <div className="flex justify-between items-center gap-3 text-xs p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800">
+            <div><div className="text-amber-700 dark:text-amber-400 font-semibold">Illustrative SMS cost</div><div className="text-[10px] text-amber-700/80 dark:text-amber-400/80">₹0.20 per recipient assumption; not a provider quote</div></div>
+            <span className="font-black text-amber-700 dark:text-amber-400">₹{estimatedSmsCost.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between text-xs p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800">
-            <span className="text-amber-700 dark:text-amber-400 font-semibold">Estimated SMS cost (fallback)</span>
-            <span className="font-bold text-amber-700 dark:text-amber-400">â‚¹ 1,240</span>
-          </div>
-          <Alert type="info">Sends above 10,000 recipients require two-person approval (TPI-01). A second approver will be notified.</Alert>
+          <Alert type="info">This project data does not include real push tokens, email addresses, provider delivery status, or a verified SMS tariff. The preview is for frontend demonstration only.</Alert>
+        </div>
+      </Modal>
+
+      <Modal open={showConfirmation} onClose={() => setShowConfirmation(false)} title="Confirm demo send" size="md"
+        footer={<><button className="btn-secondary btn-sm" onClick={() => setShowConfirmation(false)}>Go back</button><button className="btn-primary btn-sm" onClick={confirmDemoSend}>Confirm demo send</button></>}>
+        <div className="space-y-3">
+          <Alert type="warning">This action only adds a demo record to this page. It does not send SMS, push notifications, or email, and it does not save to the backend.</Alert>
+          <div className="text-sm text-slate-700 dark:text-slate-200">You are about to record <strong>{activeRecipients.length}</strong> active sample recipient(s) for <strong>{target}</strong>.</div>
+          <div className="text-xs text-slate-500">Subject: {subject}</div>
+          <div className="text-xs text-slate-500">Selected channel: {smsEnabled ? 'SMS demo estimate' : 'No channel selected'}</div>
         </div>
       </Modal>
 
       <div className="card overflow-hidden">
         <table className="tbl"><thead><tr><th>Type</th><th>Subject</th><th>From</th><th>Recipients</th><th>Time</th><th>Status</th><th>Actions</th></tr></thead>
-        <tbody>{filtered.map(m=>(
-          <tr key={m.id} className="cursor-pointer" onClick={()=>setSelected(m)}>
-            <td><MsgBadge type={m.type}/></td>
-            <td className="font-semibold text-slate-800 dark:text-slate-200 max-w-xs truncate">{m.subject}</td>
-            <td className="text-slate-500">{m.from}</td>
-            <td>{m.recipients.toLocaleString()}</td>
-            <td className="text-slate-400">{m.time}</td>
-            <td><StatusBadge status={m.status}/></td>
-            <td><button className="btn-xs btn-outline" onClick={e=>{e.stopPropagation();setSelected(m)}}>View</button></td>
-          </tr>
-        ))}</tbody>
+          <tbody>{filtered.map(message => (
+            <tr key={message.id} className="cursor-pointer" onClick={() => setSelected(message)}>
+              <td><MsgBadge type={message.type}/></td>
+              <td className="font-semibold text-slate-800 dark:text-slate-200 max-w-xs truncate">{message.subject}</td>
+              <td className="text-slate-500">{message.from}</td>
+              <td>{message.recipients.toLocaleString()}</td>
+              <td className="text-slate-400">{message.time}</td>
+              <td><StatusBadge status={message.status}/></td>
+              <td><button className="btn-xs btn-outline" onClick={event => { event.stopPropagation(); setSelected(message) }}>View</button></td>
+            </tr>
+          ))}</tbody>
         </table>
       </div>
 
-      <Modal open={!!selected} onClose={()=>setSelected(null)} title={selected?.subject||''} size="md">
-        {selected&&<div className="space-y-3">
-          <div className="flex gap-2 flex-wrap"><MsgBadge type={selected.type}/><StatusBadge status={selected.status}/>{selected.ack&&<span className="badge badge-warning">Requires acknowledgement</span>}</div>
+      <Modal open={!!selected} onClose={() => setSelected(null)} title={selected?.subject || ''} size="md">
+        {selected && <div className="space-y-3">
+          <div className="flex gap-2 flex-wrap"><MsgBadge type={selected.type}/><StatusBadge status={selected.status}/>{selected.ack && <span className="badge badge-warning">Requires acknowledgement</span>}</div>
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div><span className="text-slate-400">From:</span> <span className="font-semibold">{selected.from}</span></div>
             <div><span className="text-slate-400">Recipients:</span> <span className="font-semibold">{selected.recipients.toLocaleString()}</span></div>
@@ -513,9 +626,6 @@ function MessagesPage({ accent }) {
   )
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
-// TASKS â€” rich create form with step-by-step UX
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 const PRIORITY_META = {
   High:   { color:'#f43f5e', bg:'#fff1f2', label:'ðŸ”´ High priority',   desc:'Needs immediate attention' },
   Medium: { color:'#f59e0b', bg:'#fffbeb', label:'ðŸŸ¡ Medium priority', desc:'Important but not urgent' },
@@ -530,45 +640,140 @@ const EVIDENCE_META = {
 
 function TasksPage({ accent }) {
   const [filter, setFilter] = useState('All')
+  const [localTasks, setLocalTasks] = useState(() => TASKS.map(task => ({ ...task })))
+  const [taskFeedback, setTaskFeedback] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [selected, setSelected] = useState(null)
   const [step, setStep] = useState(1)
   const [form, setForm] = useState({
-    title:'', desc:'', assignee:'Arjun Patel â€” Field Worker',
+    title:'', desc:'', assignee:'Arjun Patel â€” Field Worker (Zone A)',
     node:'Zone A â€” Booth 12', priority:'High', due:'',
     escalation:'Escalate to me after 24h', evidence:'Photo evidence',
   })
   const set = (k,v) => setForm(f=>({...f,[k]:v}))
-  const filtered = filter==='All' ? TASKS : TASKS.filter(t=>t.status===filter)
+  const startOfToday = new Date()
+  startOfToday.setHours(0, 0, 0, 0)
+  const getDueDate = due => {
+    if (!due || due === 'No deadline') return null
+    if (due === 'Today') return new Date(startOfToday)
+    if (due === 'Tomorrow') { const d = new Date(startOfToday); d.setDate(d.getDate() + 1); return d }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(due)) { const [y,m,d] = due.split('-').map(Number); return new Date(y, m - 1, d) }
+    const parsed = new Date(due)
+    if (!Number.isNaN(parsed.getTime())) { parsed.setHours(0, 0, 0, 0); return parsed }
+    const shortDate = due.match(/^([A-Za-z]{3})\s+(\d{1,2})$/)
+    if (shortDate) { const parsedShort = new Date(`${shortDate[1]} ${shortDate[2]}, ${new Date().getFullYear()}`); if (!Number.isNaN(parsedShort.getTime())) { parsedShort.setHours(0, 0, 0, 0); return parsedShort } }
+    return null
+  }
+  const isTaskOverdue = task => {
+    if (task.status === 'Completed') return false
+    if (task.status === 'Overdue') return true
+    const dueDate = getDueDate(task.due)
+    return Boolean(dueDate && dueDate < startOfToday)
+  }
+  const filtered = filter === 'All'
+    ? localTasks
+    : filter === 'Overdue'
+      ? localTasks.filter(isTaskOverdue)
+      : localTasks.filter(task => task.status === filter && !isTaskOverdue(task))
+  const overdueTasks = localTasks.filter(isTaskOverdue)
+  const updateTaskStatus = (taskId, nextStatus) => {
+    setLocalTasks(tasks => tasks.map(task => task.id === taskId ? { ...task, status: nextStatus } : task))
+    setSelected(current => current?.id === taskId ? { ...current, status: nextStatus } : current)
+    setTaskFeedback(`Task status updated to ${nextStatus}. This change is held in local demo state only.`)
+  }
+  const BOARD_COLUMNS = ['Assigned', 'In Progress', 'Blocked', 'Completed', 'Overdue']
 
   const STEPS = ['What is the task?','Who does it?','How urgent is it?','Review & create']
 
-  const openCreate = () => { setStep(1); setForm({title:'',desc:'',assignee:'Arjun Patel â€” Field Worker',node:'Zone A â€” Booth 12',priority:'High',due:'',escalation:'Escalate to me after 24h',evidence:'Photo evidence'}); setShowCreate(true) }
+  const openCreate = () => { setStep(1); setForm({title:'',desc:'',assignee:'Arjun Patel â€” Field Worker (Zone A)',node:'Zone A â€” Booth 12',priority:'High',due:'',escalation:'Escalate to me after 24h',evidence:'Photo evidence'}); setShowCreate(true) }
+  const createTask = () => {
+    if (!form.title.trim()) return
+    const newTask = {
+      id: `TASK-${Date.now()}`,
+      title: form.title.trim(),
+      desc: form.desc.trim(),
+      assignee: form.assignee.replace(/ \([^)]*\)$/, ''),
+      node: form.node,
+      due: form.due ? new Date(`${form.due}T00:00:00`).toLocaleDateString() : 'No deadline',
+      priority: form.priority,
+      status: 'Assigned',
+      evidence: form.evidence,
+      escalation: form.escalation,
+    }
+    setLocalTasks(tasks => [newTask, ...tasks])
+    setFilter('All')
+    setSelected(null)
+    setShowCreate(false)
+    setStep(1)
+    setTaskFeedback(`Task "${newTask.title}" created in this demo and added to the task list. No backend record was created.`)
+  }
+
 
   return (
     <div className="space-y-4 page">
+      {taskFeedback && <Alert type="success" onClose={() => setTaskFeedback("")}>{taskFeedback}</Alert>}
       <div className="flex items-center justify-between">
         <FilterPills options={['All','In Progress','Assigned','Blocked','Completed','Overdue']} active={filter} onChange={setFilter}/>
         <button onClick={openCreate} className="btn-primary btn-sm"><PlusCircle size={13}/>New task</button>
       </div>
 
-      <div className="card overflow-hidden">
-        <table className="tbl">
-          <thead><tr><th>Task ID</th><th>Title</th><th>Assignee</th><th>Node</th><th>Due</th><th>Priority</th><th>Status</th><th>Evidence</th></tr></thead>
-          <tbody>{filtered.map(t=>(
-            <tr key={t.id} className="cursor-pointer" onClick={()=>setSelected(t)}>
-              <td className="font-black text-primary-600 dark:text-primary-400 font-mono">{t.id}</td>
-              <td className="font-semibold text-slate-800 dark:text-slate-200 max-w-xs truncate">{t.title}</td>
-              <td><div className="flex items-center gap-2"><Avatar initials={t.assignee.split(' ').map(n=>n[0]).join('')} size="xs" color={accent}/>{t.assignee}</div></td>
-              <td className="text-slate-400 text-[10px]">{t.node}</td>
-              <td className={`font-semibold ${t.due==='Today'?'text-rose-600 dark:text-rose-400':t.due==='Tomorrow'?'text-amber-600':'text-slate-500'}`}>{t.due}</td>
-              <td><StatusBadge status={t.priority}/></td>
-              <td><StatusBadge status={t.status}/></td>
-              <td><StatusBadge status={t.evidence}/></td>
-            </tr>
-          ))}</tbody>
-        </table>
+      <div className="grid grid-cols-4 gap-3">
+        <KpiCard label="Total tasks" value={localTasks.length} icon={ClipboardCheck} accent={accent}/>
+        <KpiCard label="In progress" value={localTasks.filter(task => task.status === 'In Progress').length} icon={Activity} accent="#0891b2"/>
+        <KpiCard label="Blocked" value={localTasks.filter(task => task.status === 'Blocked').length} icon={AlertTriangle} accent="#f59e0b"/>
+        <KpiCard label="Overdue" value={overdueTasks.length} icon={Clock} accent="#f43f5e"/>
       </div>
+
+      {overdueTasks.length > 0 && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 dark:bg-rose-950/20 dark:border-rose-900 p-4">
+          <div className="flex items-center gap-2 text-rose-700 dark:text-rose-300 font-bold text-sm mb-2"><AlertTriangle size={16}/>Overdue tasks need attention ({overdueTasks.length})</div>
+          <div className="space-y-2">
+            {overdueTasks.slice(0, 4).map(task => (
+              <button key={task.id} onClick={() => setSelected(task)} className="w-full flex items-center justify-between gap-3 text-left text-xs p-2 rounded-lg bg-white/70 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-900">
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{task.title}</span>
+                <span className="text-rose-600 dark:text-rose-400 flex-shrink-0">Due: {task.due}</span>
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-rose-600/80 dark:text-rose-300/80 mt-2">Demo alert only. No automatic escalation or external notification is sent.</p>
+        </div>
+      )}
+
+      {filter === 'Overdue' ? (
+        <div className="card overflow-hidden">
+          <div className="p-4 border-b border-slate-100 dark:border-slate-800 font-bold text-sm">Overdue task list</div>
+          {filtered.length ? filtered.map(task => (
+            <button key={task.id} onClick={() => setSelected(task)} className="w-full text-left p-4 border-b last:border-b-0 border-slate-100 dark:border-slate-800 hover:bg-rose-50/50 dark:hover:bg-rose-950/10">
+              <div className="flex items-center justify-between gap-3"><span className="font-bold text-sm text-slate-800 dark:text-slate-200">{task.title}</span><StatusBadge status="Overdue"/></div>
+              <div className="text-xs text-slate-500 mt-1">{task.id} · {task.assignee} · {task.node} · Due {task.due}</div>
+            </button>
+          )) : <div className="p-8 text-center text-sm text-slate-400">No overdue tasks.</div>}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-3 items-start">
+          {BOARD_COLUMNS.map(column => {
+            const columnTasks = column === 'Overdue'
+              ? filtered.filter(isTaskOverdue)
+              : filtered.filter(task => task.status === column && !isTaskOverdue(task))
+            return (
+              <section key={column} className="rounded-xl bg-slate-100/80 dark:bg-slate-900/60 p-3 min-h-48">
+                <div className="flex items-center justify-between mb-3"><h3 className="text-xs font-black text-slate-700 dark:text-slate-200">{column}</h3><span className="text-[10px] font-bold px-2 py-1 rounded-full bg-white dark:bg-slate-800 text-slate-500">{columnTasks.length}</span></div>
+                <div className="space-y-2">
+                  {columnTasks.map(task => (
+                    <button key={task.id} onClick={() => setSelected(task)} className="w-full text-left card p-3 hover:border-indigo-300 dark:hover:border-indigo-700 transition-colors">
+                      <div className="flex items-start justify-between gap-2"><span className="text-[10px] font-mono text-slate-400">{task.id}</span>{isTaskOverdue(task) && <span className="text-[9px] font-bold text-rose-600">OVERDUE</span>}</div>
+                      <div className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1">{task.title}</div>
+                      <div className="text-[10px] text-slate-500 mt-2">{task.assignee}</div>
+                      <div className="flex items-center justify-between gap-2 mt-3"><StatusBadge status={task.priority}/><span className={`text-[10px] ${isTaskOverdue(task) ? 'text-rose-600 font-bold' : 'text-slate-400'}`}>Due {task.due}</span></div>
+                    </button>
+                  ))}
+                  {columnTasks.length === 0 && <div className="text-[10px] text-slate-400 text-center py-6">No tasks</div>}
+                </div>
+              </section>
+            )
+          })}
+        </div>
+      )}
 
       <Alert type="info">Evidence mix: <strong>72% attested</strong>, 20% unattested, 8% flagged. Flags are for human review â€” never automatic penalties.</Alert>
 
@@ -585,7 +790,7 @@ function TasksPage({ accent }) {
               {step > 1 && <button onClick={()=>setStep(s=>s-1)} className="btn-secondary btn-sm">â† Back</button>}
               {step < 4
                 ? <button onClick={()=>setStep(s=>s+1)} disabled={step===1&&!form.title} className="btn-primary btn-sm">Next â†’</button>
-                : <button onClick={()=>setShowCreate(false)} className="btn-primary btn-sm"><CheckCircle2 size={13}/>Create task</button>
+                : <button onClick={createTask} disabled={!form.title.trim()} className="btn-primary btn-sm"><CheckCircle2 size={13}/>Create task</button>
               }
             </div>
           </div>
@@ -743,15 +948,17 @@ function TasksPage({ accent }) {
       {/* Task detail modal */}
       <Modal open={!!selected} onClose={()=>setSelected(null)} title={selected?.id||''} size="md">
         {selected&&<div className="space-y-3">
-          <div className="flex gap-2 flex-wrap"><StatusBadge status={selected.status}/><StatusBadge status={selected.priority}/><StatusBadge status={selected.evidence}/></div>
+          <div className="flex gap-2 flex-wrap"><StatusBadge status={selected.status}/><StatusBadge status={selected.priority}/><StatusBadge status={selected.evidence}/>{isTaskOverdue(selected) && <StatusBadge status="Overdue"/>}</div>
           <h3 className="text-base font-bold text-slate-900 dark:text-white">{selected.title}</h3>
           <p className="text-sm text-slate-600 dark:text-slate-400">{selected.desc}</p>
           <div className="grid grid-cols-2 gap-2 text-xs">
-            {[['Assignee',selected.assignee],['Node',selected.node],['Due',selected.due],['Escalation',selected.escalation]].map(([k,v])=>(
-              <div key={k} className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800"><span className="text-slate-400 block mb-0.5">{k}</span><span className="font-semibold text-slate-700 dark:text-slate-300">{v}</span></div>
+            {[['Assignee',selected.assignee],['Node',selected.node],['Due',selected.due],['Escalation rule',selected.escalation]].map(([k,v])=>(
+              <div key={k} className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800"><span className="text-slate-400 block mb-0.5">{k}</span><span className="font-semibold text-slate-700 dark:text-slate-300">{v || 'Not specified'}</span></div>
             ))}
           </div>
-          {selected.status==='Blocked'&&<Alert type="danger">This task is blocked. The assignee must provide a reason and notify the assigning level within 5 minutes.</Alert>}
+          {isTaskOverdue(selected) && <Alert type="danger">This task is past its deadline. Review the escalation rule and follow up with the assignee.</Alert>}
+          {selected.status==='Blocked'&&<Alert type="warning">This task is blocked. Follow up with the assignee and record the reason in the task workflow.</Alert>}
+          <div><label className="label">Update task status</label><select className="select" value={selected.status === 'Overdue' ? 'In Progress' : selected.status} onChange={event => updateTaskStatus(selected.id, event.target.value)}><option>Assigned</option><option>In Progress</option><option>Blocked</option><option>Completed</option></select><p className="text-[10px] text-slate-400 mt-1">Status changes update this page only. Backend sync is not connected.</p></div>
         </div>}
       </Modal>
     </div>
@@ -949,7 +1156,7 @@ export default function Leader({ page, user }) {
   const pages = {
     0:<Dashboard accent={accent}/>,
     1:<HierarchyPage accent={accent}/>,
-    2:<MessageAdvanced accent={accent}/>,
+    2:<div className="space-y-6"><MessageAdvanced accent={accent}/><MessagesPage accent={accent}/></div>,
     3:<TasksPage accent={accent}/>,
     4:<CitizenPage accent={accent}/>,
     5:<AnalyticsPage accent={accent}/>,
@@ -960,5 +1167,3 @@ export default function Leader({ page, user }) {
   }
   return pages[page] || <Dashboard accent={accent}/>
 }
-
-

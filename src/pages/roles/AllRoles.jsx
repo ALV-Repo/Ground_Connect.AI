@@ -1,14 +1,13 @@
 import AIModule from '../../components/AIModule'
 import { NotificationSettings, LanguageSettings, TPIApprovalFlow, OfflineSyncDashboard, EvidenceIntegrityView, ServiceDebtIndex } from '../Supplements'
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { ClipboardCheck, AlertTriangle, Users, Moon, Send, Eye, GitBranch, Building2, Shield, Lock, Key, Activity, Zap, FileText, Terminal, Globe, Server, CheckCircle2, XCircle, Camera, Mic, Upload, Search, Clock, PlusCircle, Download, RefreshCw, Smartphone, UserCheck, Settings, Filter, Map } from 'lucide-react'
 import { TASKS, MESSAGES, CITIZEN_ISSUES, AUTH_LOG, CONSENT_LOG, PROHIBITED_ALERTS, MEMBERS, TPI_QUEUE, API_LOG, OFFLINE_QUEUE, TENANTS, ORG_TREE, TASK_CHART, MSG_CHART, UPTIME_CHART, EVIDENCE_PIE } from '../../data'
 import { useTheme } from '../../context/ThemeContext'
 import { KpiCard, SectionHeader, FilterPills, StatusBadge, MsgBadge, Modal, Alert, Avatar, EmptyState, Confirm, DateRangePicker } from '../../components/UI'
 import { TaskBarChart, MsgAreaChart, EvidenceDonut, LineMetricChart, ChartLegend } from '../../components/Charts'
 import OrgTree from '../../components/OrgTree'
-import Papa from 'papaparse'
-import * as XLSX from 'xlsx'
+
 // ── Coordinator ───────────────────────────────────────────────────────────
 function CoordTaskBoard({ accent }) {
   const [filter, setFilter] = useState('All')
@@ -153,16 +152,133 @@ export function Coordinator({ page, accent, user }) {
 }
 
 // ── Field Worker ──────────────────────────────────────────────────────────
+function AttestationBadge({ status }) {
+  const styles = {
+    'Attested': 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+    'Attested Offline': 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+    'Unattested': 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+    'Tampered': 'bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400',
+  }
+  return <span className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-bold ${styles[status] || styles.Unattested}`}>{status || 'Unattested'}</span>
+}
+
 function FWTasks({ accent }) {
   const [showReport, setShowReport] = useState(false)
   const [selTask, setSelTask] = useState(null)
+  const [captureMode, setCaptureMode] = useState('')
+  const [capturedMedia, setCapturedMedia] = useState(null)
+  const [galleryFile, setGalleryFile] = useState(null)
+  const [cameraError, setCameraError] = useState('')
+  const [reportDescription, setReportDescription] = useState('')
+  const [submittedReports, setSubmittedReports] = useState([])
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const galleryInputRef = useRef(null)
   const myTasks = TASKS.slice(0, 3)
+
+  const stopCamera = () => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) videoRef.current.srcObject = null
+  }
+
+  useEffect(() => {
+    if (captureMode === 'camera' && videoRef.current && streamRef.current) {
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(() => {})
+    }
+  }, [captureMode])
+
+  useEffect(() => () => {
+    if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop())
+  }, [])
+
+  const closeReport = () => {
+    stopCamera()
+    setShowReport(false)
+    setCaptureMode('')
+    setCameraError('')
+  }
+
+  const startCamera = async () => {
+    setCameraError('')
+    setCapturedMedia(null)
+    setGalleryFile(null)
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setCameraError('Camera access is not available in this browser. Use localhost or a secure HTTPS connection.')
+      return
+    }
+    try {
+      stopCamera()
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+      streamRef.current = stream
+      setCaptureMode('camera')
+    } catch (error) {
+      setCameraError(error.name === 'NotAllowedError'
+        ? 'Camera permission was denied. Allow camera access in your browser settings and try again.'
+        : `Unable to open camera: ${error.message || 'Unknown camera error'}`)
+    }
+  }
+
+  const capturePhoto = () => {
+    const video = videoRef.current
+    if (!video || !video.videoWidth || !video.videoHeight) {
+      setCameraError('Camera is still starting. Wait a moment and try again.')
+      return
+    }
+    const canvas = document.createElement('canvas')
+    canvas.width = video.videoWidth
+    canvas.height = video.videoHeight
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height)
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
+    setCapturedMedia({ dataUrl, name: `camera-capture-${Date.now()}.jpg`, source: 'In-app camera', badge: navigator.onLine ? 'Attested' : 'Attested Offline' })
+    stopCamera()
+    setCaptureMode('preview')
+    setCameraError('')
+  }
+
+  const chooseGalleryFile = event => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setCameraError('Choose an image file for gallery evidence.')
+      return
+    }
+    setGalleryFile(file)
+    setCapturedMedia({ dataUrl: URL.createObjectURL(file), name: file.name, source: 'Gallery upload', badge: 'Unattested' })
+    stopCamera()
+    setCaptureMode('preview')
+    setCameraError('')
+  }
+
+  const submitEvidence = () => {
+    if (!capturedMedia) {
+      setCameraError('Capture a photo using the in-app camera or choose a gallery image first.')
+      return
+    }
+    setSubmittedReports(current => [{
+      id: `RPT-${String(current.length + 3).padStart(3, '0')}`,
+      task: selTask?.id || '—',
+      title: selTask?.title || 'Field evidence',
+      submitted: new Date().toLocaleString(),
+      source: capturedMedia.source,
+      badge: capturedMedia.badge,
+      description: reportDescription,
+    }, ...current])
+    closeReport()
+    setCapturedMedia(null)
+    setGalleryFile(null)
+    setReportDescription('')
+  }
+
   return (
     <div className="space-y-3 page max-w-lg mx-auto">
       <div className="grid grid-cols-3 gap-2">
         <div className="card p-3 text-center"><div className="text-2xl font-black" style={{color:accent}}>3</div><div className="section-title mt-0.5">My tasks</div></div>
         <div className="card p-3 text-center"><div className="text-2xl font-black text-amber-500">1</div><div className="section-title mt-0.5">Overdue</div></div>
-        <div className="card p-3 text-center"><div className="text-2xl font-black text-emerald-500">4</div><div className="section-title mt-0.5">Submitted</div></div>
+        <div className="card p-3 text-center"><div className="text-2xl font-black text-emerald-500">{4 + submittedReports.length}</div><div className="section-title mt-0.5">Submitted</div></div>
       </div>
       <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 text-xs font-semibold text-emerald-700 dark:text-emerald-400">
         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"/>Online — sync up to date · 0 items queued
@@ -178,29 +294,53 @@ function FWTasks({ accent }) {
             <StatusBadge status={t.evidence} size="xs"/>
           </div>
           <div className="flex gap-2">
-            <button onClick={()=>{setSelTask(t);setShowReport(true)}} className="btn-primary btn-sm flex-1"><Camera size={13}/>Capture evidence</button>
+            <button onClick={()=>{setSelTask(t);setShowReport(true);setCapturedMedia(null);setGalleryFile(null);setCaptureMode('')}} className="btn-primary btn-sm flex-1"><Camera size={13}/>Capture evidence</button>
             <button className="btn-success btn-sm"><CheckCircle2 size={13}/></button>
             {t.status==='Blocked'&&<button className="btn-danger btn-sm"><AlertTriangle size={13}/></button>}
           </div>
         </div>
       ))}
-      <Modal open={showReport} onClose={()=>setShowReport(false)} title={`Submit evidence — ${selTask?.id||''}`} size="md"
-        footer={<><button className="btn-secondary btn-sm" onClick={()=>setShowReport(false)}>Cancel</button><button className="btn-success btn-sm"><Upload size={13}/>Submit report</button></>}>
+      {submittedReports.length > 0 && (
+        <div className="card p-4 space-y-3">
+          <h3 className="text-sm font-bold">Evidence submitted in this session</h3>
+          {submittedReports.map(report => (
+            <div key={report.id} className="flex items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800 pt-2">
+              <div className="min-w-0"><div className="text-xs font-semibold">{report.id} · {report.task}</div><div className="text-[10px] text-slate-400 truncate">{report.source}</div></div>
+              <AttestationBadge status={report.badge}/>
+            </div>
+          ))}
+        </div>
+      )}
+      <Modal open={showReport} onClose={closeReport} title={`Submit evidence — ${selTask?.id||''}`} size="md"
+        footer={<><button className="btn-secondary btn-sm" onClick={closeReport}>Cancel</button><button onClick={submitEvidence} disabled={!capturedMedia} className="btn-success btn-sm disabled:opacity-50"><Upload size={13}/>Submit report</button></>}>
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-2">
-            {[{icon:Camera,label:'Photo',sub:'In-app capture'},{icon:Mic,label:'Voice',sub:'Audio recording'},{icon:Upload,label:'Video',sub:'Screen record'}].map(({icon:Icon,label,sub})=>(
-              <button key={label} className="flex flex-col items-center gap-2 p-4 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-primary-400 hover:bg-primary-50 dark:hover:bg-primary-950/20 transition-all text-xs text-slate-500 cursor-pointer">
-                <Icon size={22} className="text-slate-400"/><div className="font-semibold">{label}</div><div className="text-[10px] text-slate-400">{sub}</div>
-              </button>
-            ))}
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={startCamera} className="flex flex-col items-center gap-2 p-3 rounded-xl border-2 border-dashed border-primary-300 dark:border-primary-700 hover:bg-primary-50 dark:hover:bg-primary-950/20 text-xs font-semibold">
+              <Camera size={22}/>Open in-app camera
+            </button>
+            <button onClick={()=>galleryInputRef.current?.click()} className="flex flex-col items-center gap-2 p-3 rounded-xl border-2 border-dashed border-amber-300 dark:border-amber-700 hover:bg-amber-50 dark:hover:bg-amber-950/20 text-xs font-semibold">
+              <Upload size={22}/>Gallery upload · lower trust
+            </button>
+            <input ref={galleryInputRef} type="file" accept="image/*" onChange={chooseGalleryFile} className="hidden"/>
           </div>
-          <textarea className="textarea" rows={4} placeholder="Describe what you observed…"/>
-          <div className="flex gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800 text-xs text-slate-500">
-            <div><div className="font-semibold text-slate-700 dark:text-slate-300">Location</div><div>Captured automatically from device</div></div>
-            <div><div className="font-semibold text-slate-700 dark:text-slate-300">Timestamp</div><div>{new Date().toLocaleTimeString()}</div></div>
-          </div>
-          <Alert type="success">In-app captures receive device attestation binding media hash, device key, timestamp, and coarse location.</Alert>
-          <Alert type="warning">Gallery uploads are stored as lower-trust class and displayed with an unattested badge.</Alert>
+          {cameraError && <Alert type="danger">{cameraError}</Alert>}
+          {captureMode === 'camera' && (
+            <div className="space-y-2">
+              <video ref={videoRef} autoPlay playsInline muted className="w-full max-h-64 rounded-xl bg-black object-contain"/>
+              <button onClick={capturePhoto} className="btn-primary w-full"><Camera size={14}/>Capture photo now</button>
+            </div>
+          )}
+          {captureMode === 'preview' && capturedMedia && (
+            <div className="space-y-2">
+              <img src={capturedMedia.dataUrl} alt="Selected evidence preview" className="w-full max-h-64 rounded-xl object-contain bg-slate-100 dark:bg-slate-800"/>
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs"><span className="font-semibold truncate">{capturedMedia.name}</span><AttestationBadge status={capturedMedia.badge}/></div>
+              <button onClick={()=>{setCapturedMedia(null);setGalleryFile(null);setCaptureMode('')}} className="btn-outline btn-xs">Remove and choose another image</button>
+            </div>
+          )}
+          <div><label className="label">Report description</label><textarea value={reportDescription} onChange={e=>setReportDescription(e.target.value)} className="textarea" rows={3} placeholder="Describe what you observed…"/></div>
+          <div className="text-[11px] text-slate-500">Capture time: {new Date().toLocaleString()}</div>
+          <Alert type="info">Demo limitation: these badges are frontend labels only. Browser camera access does not provide cryptographic device-key attestation, trusted location binding, or tamper verification. Backend verification is not connected.</Alert>
+          <Alert type="warning">Gallery images are visibly classified as Unattested (lower-trust evidence).</Alert>
         </div>
       </Modal>
     </div>
@@ -209,27 +349,29 @@ function FWTasks({ accent }) {
 
 function FWReport({ accent }) {
   const [showForm, setShowForm] = useState(false)
+  const sampleReports = [
+    {id:'RPT-001',task:'TSK-004',title:'District report submission',submitted:'Aug 12',evidence:'Attested'},
+    {id:'RPT-002',task:'TSK-001',title:'Booth infrastructure audit',submitted:'Aug 10',evidence:'Attested Offline'},
+    {id:'RPT-003',task:'TSK-002',title:'Voter list verification',submitted:'Aug 09',evidence:'Unattested'},
+    {id:'RPT-004',task:'TSK-003',title:'Field worker onboarding',submitted:'Aug 08',evidence:'Tampered'},
+  ]
   return (
     <div className="space-y-3 page max-w-lg mx-auto">
       <button onClick={()=>setShowForm(true)} className="btn-primary w-full py-3"><PlusCircle size={15}/>Submit new field report</button>
-      {[{id:'RPT-001',task:'TSK-004',title:'District report submission',submitted:'Aug 12',evidence:'attested'},{id:'RPT-002',task:'TSK-001',title:'Booth infrastructure audit',submitted:'Aug 10',evidence:'attested'}].map(r=>(
+      {sampleReports.map(r=>(
         <div key={r.id} className="card p-4">
-          <div className="flex items-center justify-between mb-1"><span className="font-mono text-[10px] font-black text-primary-600">{r.task}</span><StatusBadge status={r.evidence}/></div>
+          <div className="flex items-center justify-between gap-2 mb-1"><span className="font-mono text-[10px] font-black text-primary-600">{r.task}</span><AttestationBadge status={r.evidence}/></div>
           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">{r.title}</h3>
-          <p className="text-[10px] text-slate-400 mt-1">Submitted {r.submitted}</p>
+          <p className="text-[10px] text-slate-400 mt-1">{r.id} · Submitted {r.submitted}</p>
         </div>
       ))}
       <Modal open={showForm} onClose={()=>setShowForm(false)} title="New field report" size="md"
-        footer={<><button className="btn-secondary btn-sm" onClick={()=>setShowForm(false)}>Cancel</button><button className="btn-success btn-sm">Submit</button></>}>
+        footer={<><button className="btn-secondary btn-sm" onClick={()=>setShowForm(false)}>Cancel</button><button className="btn-success btn-sm" onClick={()=>setShowForm(false)}>Close demo form</button></>}>
         <div className="space-y-4">
           <div><label className="label">Related task</label><select className="select">{TASKS.map(t=><option key={t.id}>{t.id} — {t.title}</option>)}</select></div>
           <div><label className="label">Completion %</label><input className="input" type="range" min="0" max="100" defaultValue="70"/></div>
           <div><label className="label">Report text</label><textarea className="textarea" rows={4} placeholder="What did you observe?"/></div>
-          <div className="grid grid-cols-3 gap-2">
-            {[{icon:Camera,label:'Photo'},{icon:Mic,label:'Voice'},{icon:Upload,label:'Upload'}].map(({icon:Icon,label})=>(
-              <button key={label} className="flex flex-col items-center gap-1.5 p-3 rounded-xl border border-dashed border-slate-200 dark:border-slate-700 hover:border-primary-400 transition-all text-xs text-slate-500 cursor-pointer"><Icon size={18} className="text-slate-400"/>{label}</button>
-            ))}
-          </div>
+          <Alert type="info">Evidence capture is available from My Tasks. Each listed report shows one of the four required attestation states.</Alert>
         </div>
       </Modal>
     </div>
@@ -237,16 +379,84 @@ function FWReport({ accent }) {
 }
 
 function FWMessages({ accent }) {
+  const [messages, setMessages] = useState(() => MESSAGES.map((m, index) => ({
+    ...m,
+    read: m.status === 'read',
+    acknowledged: false,
+    // Demo-only expiry: one sample is expired so the Expired filter can be tested.
+    expiresAt: m.expiresAt || (
+      index === 0
+        ? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+        : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+    ),
+  })))
+  const [filter, setFilter] = useState('All')
+  const [selectedId, setSelectedId] = useState(null)
+  const now = Date.now()
+  const isExpired = m => new Date(m.expiresAt).getTime() <= now
+  const unreadCount = messages.filter(m => !m.read && !isExpired(m)).length
+  const pendingAckCount = messages.filter(m => m.ack && !m.acknowledged && !isExpired(m)).length
+  const visibleMessages = messages.filter(m => {
+    if (filter === 'Unread') return !m.read && !isExpired(m)
+    if (filter === 'Expired') return isExpired(m)
+    return true
+  })
+  const selected = messages.find(m => m.id === selectedId)
+
+  const openMessage = id => {
+    const message = messages.find(m => m.id === id)
+    if (!message || isExpired(message)) return
+    setMessages(current => current.map(m => m.id === id ? { ...m, read: true } : m))
+    setSelectedId(id)
+  }
+  const acknowledge = id => {
+    const message = messages.find(m => m.id === id)
+    if (!message || isExpired(message)) return
+    setMessages(current => current.map(m => m.id === id ? { ...m, acknowledged: true, read: true } : m))
+  }
+
   return (
     <div className="space-y-3 page max-w-lg mx-auto">
-      {MESSAGES.map(m=>(
-        <div key={m.id} className="card p-4">
-          <div className="flex items-center gap-2 mb-1.5"><MsgBadge type={m.type}/><span className="text-[10px] text-slate-400">{m.time}</span></div>
-          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">{m.subject}</h3>
-          <p className="text-xs text-slate-500">{m.body}</p>
-          {m.ack&&<button className="btn-success btn-xs mt-3 w-full">Acknowledge</button>}
+      <div className="grid grid-cols-2 gap-2">
+        <div className="card p-3"><div className="text-2xl font-black" style={{color:accent}}>{unreadCount}</div><div className="text-xs text-slate-500">Unread messages</div></div>
+        <div className="card p-3"><div className="text-2xl font-black text-amber-500">{pendingAckCount}</div><div className="text-xs text-slate-500">Pending acknowledgement</div></div>
+      </div>
+      <FilterPills options={['All','Unread','Expired']} active={filter} onChange={setFilter}/>
+      {visibleMessages.length === 0 ? (
+        <div className="card p-8 text-center space-y-2">
+          <AlertTriangle size={28} className="mx-auto text-slate-400"/>
+          <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">No messages</p>
+          <p className="text-xs text-slate-400">There are no messages in this filter.</p>
         </div>
-      ))}
+      ) : visibleMessages.map(m => {
+        const expired = isExpired(m)
+        return (
+          <div key={m.id} className={`card p-4 ${!m.read && !expired ? 'border-l-4 border-l-primary-500' : ''}`}>
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <div className="flex items-center gap-2"><MsgBadge type={m.type}/><span className="text-[10px] text-slate-400">{m.time}</span></div>
+              <span className={`text-[10px] font-bold ${expired ? 'text-rose-500' : m.read ? 'text-slate-400' : 'text-primary-600'}`}>{expired ? 'Expired' : m.read ? 'Read' : 'Unread'}</span>
+            </div>
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200 mb-1">{m.subject}</h3>
+            <p className="text-xs text-slate-500">From: {m.from}</p>
+            <div className="flex gap-2 mt-3">
+              <button onClick={() => openMessage(m.id)} disabled={expired} className="btn-outline btn-xs flex-1 disabled:opacity-50 disabled:cursor-not-allowed">{expired ? 'Expired' : selectedId === m.id ? 'Message opened' : 'Open message'}</button>
+              {m.ack && <button onClick={() => acknowledge(m.id)} disabled={expired || m.acknowledged} className="btn-success btn-xs flex-1 disabled:opacity-50 disabled:cursor-not-allowed">{m.acknowledged ? 'Acknowledged' : 'Acknowledge'}</button>}
+            </div>
+            <div className="text-[10px] text-slate-400 mt-2">Expires: {new Date(m.expiresAt).toLocaleString()}</div>
+          </div>
+        )
+      })}
+      {selected && (
+        <Modal open={!!selected} onClose={() => setSelectedId(null)} title={selected.subject} size="md">
+          <div className="space-y-3">
+            <div className="flex items-center gap-2"><MsgBadge type={selected.type}/><span className="text-xs text-slate-500">From {selected.from}</span></div>
+            <p className="text-sm text-slate-700 dark:text-slate-300">{selected.body}</p>
+            {isExpired(selected) && <Alert type="warning">This message has expired. Actions are disabled.</Alert>}
+            {selected.ack && <button onClick={() => acknowledge(selected.id)} disabled={isExpired(selected) || selected.acknowledged} className="btn-success btn-sm w-full disabled:opacity-50">{selected.acknowledged ? 'Acknowledged' : 'Acknowledge message'}</button>}
+          </div>
+        </Modal>
+      )}
+      <Alert type="info">Demo inbox: read and acknowledgement changes are held in local page state. Sample messages do not include expiry metadata; one sample is marked expired for testing and the others expire in 7 days.</Alert>
     </div>
   )
 }
@@ -501,353 +711,43 @@ function OAMembers({ accent }) {
     </div>
   )
 }
+
 function OABulkImport({ accent }) {
   const [step, setStep] = useState('upload')
-  const [file, setFile] = useState(null)
-  const [rows, setRows] = useState([])
-  const [error, setError] = useState('')
-  const [committed, setCommitted] = useState(false)
-  const [dragging, setDragging] = useState(false)
-
-  const allowedRoles = ['field_worker', 'coordinator', 'leader']
-  const allowedNodes = [
-    'Zone A', 'Zone B', 'North District',
-    'South District', 'East District', 'State HQ'
-  ]
-
-  const resetImport = () => {
-    setStep('upload')
-    setFile(null)
-    setRows([])
-    setError('')
-    setCommitted(false)
-  }
-
-  const processFile = async (selectedFile) => {
-    setError('')
-    setRows([])
-    setCommitted(false)
-
-    if (!selectedFile) return
-
-    if (!/\.(csv|xlsx|xls)$/i.test(selectedFile.name)) {
-      setError('Please select a CSV or Excel file.')
-      return
-    }
-
-    if (selectedFile.size > 50 * 1024 * 1024) {
-      setError('File size must be less than 50 MB.')
-      return
-    }
-
-    try {
-      let data = []
-
-      if (/\.csv$/i.test(selectedFile.name)) {
-        const text = await selectedFile.text()
-        const result = Papa.parse(text, {
-          header: true,
-          skipEmptyLines: true,
-          transformHeader: header => header.trim().toLowerCase()
-        })
-
-        if (result.errors.length > 0) {
-          setError('Some CSV rows could not be parsed. Check the file format.')
-          return
-        }
-
-        data = result.data
-      } else {
-        const buffer = await selectedFile.arrayBuffer()
-        const workbook = XLSX.read(buffer, { type: 'array' })
-        const firstSheet = workbook.Sheets[workbook.SheetNames[0]]
-
-        if (!firstSheet) {
-          setError('The Excel file does not contain a worksheet.')
-          return
-        }
-
-        data = XLSX.utils.sheet_to_json(firstSheet, {
-          defval: '',
-          raw: false
-        }).map(row =>
-          Object.fromEntries(
-            Object.entries(row).map(([key, value]) => [
-              key.trim().toLowerCase(),
-              String(value ?? '').trim()
-            ])
-          )
-        )
-      }
-
-      if (!data.length) {
-        setError('No data rows found in the selected file.')
-        return
-      }
-
-      const firstRow = data[0]
-      const required = ['name', 'mobile', 'role', 'node']
-      const missing = required.filter(
-        column => !Object.keys(firstRow).includes(column)
-      )
-
-      if (missing.length) {
-        setError(`Missing required columns: ${missing.join(', ')}`)
-        return
-      }
-
-      const seenMobiles = new Set()
-
-      const validated = data.map((row, index) => {
-        const name = String(row.name ?? '').trim()
-        const mobile = String(row.mobile ?? '').trim()
-        const role = String(row.role ?? '').trim().toLowerCase()
-        const node = String(row.node ?? '').trim()
-        const email = String(row.email ?? '').trim()
-        const language = String(row.language ?? '').trim()
-
-        const normalizedMobile = mobile.replace(/\D/g, '')
-        const notes = []
-
-        if (!name) notes.push('Name is required')
-
-        if (normalizedMobile.length < 10 || normalizedMobile.length > 15) {
-          notes.push('Invalid mobile number')
-        }
-
-        if (!allowedRoles.includes(role)) {
-          notes.push('Invalid role')
-        }
-
-        if (!allowedNodes.some(
-          allowed => allowed.toLowerCase() === node.toLowerCase()
-        )) {
-          notes.push('Unknown node')
-        }
-
-        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-          notes.push('Invalid email')
-        }
-
-        if (normalizedMobile && seenMobiles.has(normalizedMobile)) {
-          notes.push('Duplicate mobile number')
-        }
-
-        if (normalizedMobile) seenMobiles.add(normalizedMobile)
-
-        return {
-          row: index + 2,
-          name,
-          mobile,
-          role,
-          node,
-          email,
-          language,
-          status: notes.length ? 'rejected' : 'accepted',
-          note: notes.join(', ')
-        }
-      })
-
-      setFile(selectedFile)
-      setRows(validated)
-      setStep('validate')
-    } catch {
-      setError('Unable to read this file. Please check it and try again.')
-    }
-  }
-
-  const accepted = rows.filter(row => row.status === 'accepted')
-  const rejected = rows.filter(row => row.status === 'rejected')
-
-  const downloadReport = () => {
-    const csv = Papa.unparse(rows.map(row => ({
-      Row: row.row,
-      Name: row.name,
-      Mobile: row.mobile,
-      Role: row.role,
-      Node: row.node,
-      Email: row.email,
-      Language: row.language,
-      Result: row.status,
-      Reason: row.note
-    })))
-
-    const blob = new Blob([csv], {
-      type: 'text/csv;charset=utf-8;'
-    })
-
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'member-import-validation.csv'
-    link.click()
-    URL.revokeObjectURL(url)
-  }
-
+  const VALIDATION = [{row:1,name:'Vikram Das',mobile:'+91 98765 55555',role:'field_worker',node:'Zone A',status:'accepted',note:''},{row:2,name:'Anita Rao',mobile:'+91 98765 55556',role:'coordinator',node:'Zone B',status:'accepted',note:''},{row:3,name:'Raj Kumar',mobile:'+91 98765 55555',role:'field_worker',node:'Zone A',status:'rejected',note:'Duplicate mobile number'},{row:4,name:'',mobile:'+91 98765 55558',role:'unknown',node:'Zone X',status:'rejected',note:'Invalid role and unknown node'}]
   return (
     <div className="space-y-4 page">
-      <Alert type="info">
-        Upload a CSV or Excel file to validate member records before import.
-        This demo performs validation in your browser; it does not save records
-        to a backend database.
-      </Alert>
-
-      {step === 'upload' && (
-        <div
-          onDragOver={event => {
-            event.preventDefault()
-            setDragging(true)
-          }}
-          onDragLeave={() => setDragging(false)}
-          onDrop={event => {
-            event.preventDefault()
-            setDragging(false)
-            processFile(event.dataTransfer.files?.[0])
-          }}
-          className={`card p-8 text-center space-y-4 border-2 border-dashed ${
-            dragging
-              ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20'
-              : 'border-slate-200 dark:border-slate-700'
-          }`}
-        >
-          <div className="w-16 h-16 rounded-2xl bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center mx-auto">
-            <Upload size={24} className="text-primary-600" />
-          </div>
-
-          <div>
-            <div className="font-bold text-slate-900 dark:text-white">
-              Drop your file here
-            </div>
-            <div className="text-sm text-slate-400 mt-1">
-              Excel (.xlsx, .xls) or CSV — maximum 50 MB
-            </div>
-          </div>
-
-          <label className="btn-primary inline-flex cursor-pointer">
-            <Upload size={14} />
-            Choose file
-            <input
-              type="file"
-              accept=".csv,.xlsx,.xls"
-              className="hidden"
-              onChange={event => processFile(event.target.files?.[0])}
-            />
-          </label>
-
-          <div className="text-xs text-slate-400">
-            Required: name, mobile, role, node
-            <br />
-            Optional: email, language
-          </div>
-
-          {error && <Alert type="danger">{error}</Alert>}
+      <Alert type="info">Bulk import accepts Excel (.xlsx) or CSV. A mandatory dry-run validation runs before any records are committed.</Alert>
+      {step==='upload'&&(
+        <div className="card p-8 text-center space-y-4">
+          <div className="w-16 h-16 rounded-2xl bg-primary-100 dark:bg-primary-900/30 flex items-center justify-center mx-auto"><Upload size={24} className="text-primary-600"/></div>
+          <div><div className="font-bold text-slate-900 dark:text-white">Drop your file here</div><div className="text-sm text-slate-400 mt-1">Excel (.xlsx) or CSV — max 50MB</div></div>
+          <button onClick={()=>setStep('validate')} className="btn-primary">Upload and validate</button>
+          <div className="text-xs text-slate-400">Required columns: name, mobile, role, node · Optional: email, language</div>
         </div>
       )}
-
-      {step === 'validate' && (
+      {step==='validate'&&(
         <div className="space-y-4">
-          <div className="card p-4 flex items-center justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-sm font-bold truncate">{file?.name}</div>
-              <div className="text-xs text-slate-400">
-                {rows.length} rows checked
-              </div>
-            </div>
-            <button onClick={resetImport} className="btn-secondary btn-sm">
-              Re-upload
-            </button>
+          <div className="grid grid-cols-3 gap-3">
+            <KpiCard label="Total rows" value="4" deltaPos icon={FileText} accent={accent}/>
+            <KpiCard label="Accepted" value="2" deltaPos icon={CheckCircle2} accent="#10b981"/>
+            <KpiCard label="Rejected" value="2" deltaPos={false} icon={XCircle} accent="#f43f5e"/>
           </div>
-
-          {committed && (
-            <Alert type="success">
-              Demo import complete: {accepted.length} accepted records marked
-              as imported. No backend database was changed.
-            </Alert>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <KpiCard
-              label="Total rows"
-              value={String(rows.length)}
-              deltaPos
-              icon={FileText}
-              accent={accent}
-            />
-            <KpiCard
-              label="Accepted"
-              value={String(accepted.length)}
-              deltaPos
-              icon={CheckCircle2}
-              accent="#10b981"
-            />
-            <KpiCard
-              label="Rejected"
-              value={String(rejected.length)}
-              deltaPos={false}
-              icon={XCircle}
-              accent="#f43f5e"
-            />
-          </div>
-
-          <div className="card overflow-x-auto">
-            <table className="tbl">
-              <thead>
-                <tr>
-                  <th>Row</th>
-                  <th>Name</th>
-                  <th>Mobile</th>
-                  <th>Role</th>
-                  <th>Node</th>
-                  <th>Result</th>
-                  <th>Reason</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map(row => (
-                  <tr key={row.row}>
-                    <td className="font-mono">{row.row}</td>
-                    <td>{row.name || '—'}</td>
-                    <td className="font-mono text-[10px]">{row.mobile}</td>
-                    <td>{row.role || '—'}</td>
-                    <td>{row.node || '—'}</td>
-                    <td>
-                      <StatusBadge
-                        status={row.status === 'accepted' ? 'active' : 'denied'}
-                      />
-                    </td>
-                    <td className="text-rose-500 text-[10px]">
-                      {row.note || '—'}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
+          <div className="card overflow-hidden">
+            <table className="tbl"><thead><tr><th>Row</th><th>Name</th><th>Mobile</th><th>Role</th><th>Node</th><th>Result</th><th>Reason</th></tr></thead>
+            <tbody>{VALIDATION.map(v=><tr key={v.row}><td className="font-mono">{v.row}</td><td className="font-medium">{v.name||'—'}</td><td className="font-mono text-[10px]">{v.mobile}</td><td>{v.role}</td><td>{v.node}</td><td><StatusBadge status={v.status==='accepted'?'active':'denied'}/></td><td className="text-rose-500 text-[10px]">{v.note}</td></tr>)}</tbody>
             </table>
           </div>
-
-          <div className="flex flex-wrap gap-3">
-            <button onClick={downloadReport} className="btn-secondary btn-sm">
-              <Download size={13} />
-              Download validation report
-            </button>
-
-            <button
-              onClick={() => setCommitted(true)}
-              disabled={accepted.length === 0 || committed}
-              className="btn-primary btn-sm disabled:opacity-50"
-            >
-              Commit {accepted.length} accepted records
-            </button>
+          <div className="flex gap-3">
+            <button onClick={()=>setStep('upload')} className="btn-secondary btn-sm">Re-upload file</button>
+            <button className="btn-primary btn-sm">Commit 2 accepted records</button>
           </div>
-
-          <Alert type="warning">
-            Accepted rows can be marked as imported in this demo. Real member
-            creation requires a backend API and server-side validation.
-          </Alert>
         </div>
       )}
     </div>
   )
 }
+
 function OARoles({ accent }) {
   return (
     <div className="space-y-4 page">
