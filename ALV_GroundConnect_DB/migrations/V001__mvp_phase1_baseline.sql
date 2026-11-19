@@ -176,7 +176,7 @@ CREATE TABLE identity_authentication_sessions.users (
                 'kn',
                 'ta',
                 'te',
-				'ml'
+				'ml',
 				'mr'
             )
         ),
