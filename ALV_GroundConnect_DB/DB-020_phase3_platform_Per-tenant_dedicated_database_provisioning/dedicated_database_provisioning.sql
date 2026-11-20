@@ -38,7 +38,8 @@ CREATE TABLE IF NOT EXISTS tenant_database_provisioning.database_targets
         CHECK (length(btrim(host_reference)) > 0),
 
     CONSTRAINT chk_database_targets_database_name
-        CHECK (length(btrim(database_name)) > 0),
+    CHECK (
+        database_name ~ '^[a-z][a-z0-9_]{0,62}$'),
 
     CONSTRAINT chk_database_targets_secret_reference
         CHECK (length(btrim(credential_secret_reference)) > 0),
