@@ -47,8 +47,12 @@ CREATE TABLE IF NOT EXISTS search_index.tenant_indexes
     CONSTRAINT fk_search_tenant_indexes_organization
         FOREIGN KEY (organization_id)
         REFERENCES tenant_and_configuration.tenants(id),
+    
     CONSTRAINT chk_search_tenant_indexes_index_name
-        CHECK (length(btrim(index_name)) > 0),
+    CHECK (
+        index_name ~ '^[a-z][a-z0-9_-]{0,254}$'
+    ),
+    
     CONSTRAINT chk_search_tenant_indexes_status
         CHECK (index_status IN ('active','rebuilding','disabled'))
 );
