@@ -60,6 +60,34 @@ BEGIN
         RAISE EXCEPTION 'DB-020 test failed: routing metadata incomplete';
     END IF;
 
+
+    
+    -- Database name must follow the approved naming convention.
+    -- Allowed: lowercase letters, numbers and underscores.
+    -- Must start with a lowercase letter; maximum 63 characters.
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint pc
+        JOIN pg_class c
+            ON c.oid = pc.conrelid
+        JOIN pg_namespace n
+            ON n.oid = c.relnamespace
+        WHERE n.nspname = 'tenant_database_provisioning'
+          AND c.relname = 'database_targets'
+          AND pc.conname = 'chk_database_targets_database_name'
+          AND pc.contype = 'c'
+          AND pc.convalidated
+          AND POSITION(
+              '^[a-z][a-z0-9_]{0,62}$'
+              IN pg_get_constraintdef(pc.oid)
+          ) > 0
+    ) THEN
+        RAISE EXCEPTION
+            'DB-020 test failed: database name validation constraint missing or incorrect';
+    END IF;
+
+
     IF EXISTS (
         SELECT 1
         FROM information_schema.columns
