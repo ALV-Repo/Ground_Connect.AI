@@ -1,7 +1,7 @@
 -- ============================================================
 -- DB-017 VERIFICATION TESTS
 -- ============================================================
--- Run after the DB-017 . Tests are read-only and rollback-safe.
+-- Run after db017_consent_privacy_erasure.sql. Tests are rollback-safe.
 
 BEGIN;
 
@@ -152,6 +152,37 @@ BEGIN
 
     IF v_bad <> 10 THEN
         RAISE EXCEPTION 'DB-017: expected 10 tenant RLS policies, found %', v_bad;
+    END IF;
+END $$;
+
+-- Runtime-protection regression checks.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE n.nspname = 'consent_privacy_erasure'
+          AND t.relname = 'consent_receipts'
+          AND c.conname = 'chk_consent_receipts_lawful_basis'
+          AND c.contype = 'c'
+          AND c.convalidated
+    ) THEN
+        RAISE EXCEPTION 'DB-017 CHECK missing: lawful-basis constraint';
+    END IF;
+
+    -- Legal-hold regression guard: retention enqueue must consult active holds.
+    -- Current DB-017 migration does not include this condition yet; this test
+    -- will fail until the retention worker path is made legal-hold-aware.
+    IF position(
+        'legal_holds'
+        IN pg_get_functiondef(
+            'consent_privacy_erasure.enqueue_due_retention_work(uuid)'::regprocedure
+        )
+    ) = 0 THEN
+        RAISE EXCEPTION
+            'DB-017 legal-hold gap: enqueue_due_retention_work does not consult legal_holds';
     END IF;
 END $$;
 
