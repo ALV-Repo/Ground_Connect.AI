@@ -244,3 +244,55 @@ BEGIN
 
     RAISE NOTICE 'DB-019 structural tests passed.';
 END $$;
+
+
+-- --------------------------------------------------------------------------
+-- Runtime-protection metadata checks added for MED test coverage.
+-- --------------------------------------------------------------------------
+DO $$
+DECLARE
+    v_bad INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO v_bad
+    FROM pg_policies
+    WHERE schemaname = 'evidence_integrity'
+      AND tablename IN (
+          'evidence_attestations',
+          'evidence_perceptual_hashes',
+          'evidence_coherence_checks'
+      )
+      AND (qual IS NULL OR with_check IS NULL);
+
+    IF v_bad <> 0 THEN
+        RAISE EXCEPTION
+            'DB-019 RLS policies missing USING/WITH CHECK on % policy row(s)', v_bad;
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE n.nspname = 'evidence_integrity'
+          AND t.relname = 'evidence_attestations'
+          AND c.conname = 'chk_evidence_attestations_verified_metadata'
+          AND c.contype = 'c'
+          AND c.convalidated
+    ) THEN
+        RAISE EXCEPTION 'DB-019 verified-attestation CHECK missing or not validated';
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint c
+        JOIN pg_class t ON t.oid = c.conrelid
+        JOIN pg_namespace n ON n.oid = t.relnamespace
+        WHERE n.nspname = 'tasks_field_reports'
+          AND t.relname = 'evidence_media'
+          AND c.conname = 'chk_evidence_media_tamper_evidence'
+          AND c.contype = 'c'
+          AND c.convalidated
+    ) THEN
+        RAISE EXCEPTION 'DB-019 tamper-evidence CHECK missing or not validated';
+    END IF;
+END $$;
