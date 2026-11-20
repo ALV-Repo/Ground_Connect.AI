@@ -341,6 +341,58 @@ $$;
 
 
 -- --------------------------------------------------------------------------
+-- 7A. Runtime CHECK violation: version must be >= 1.
+-- --------------------------------------------------------------------------
+DO $$
+DECLARE
+    v_org UUID;
+BEGIN
+    SELECT id INTO v_org
+    FROM tenant_and_configuration.tenants
+    ORDER BY id
+    LIMIT 1;
+
+    IF v_org IS NULL THEN
+        RAISE NOTICE 'DB-018 CHECK runtime test skipped: no tenant seed row';
+        RETURN;
+    END IF;
+
+    PERFORM set_config('app.organization_id', v_org::TEXT, TRUE);
+
+    BEGIN
+        INSERT INTO offline_sync.syncable_record_versions
+            (organization_id, record_type, record_id, version)
+        VALUES
+            (v_org, 'db018_test', gen_random_uuid(), 0);
+
+        RAISE EXCEPTION 'DB-018 CHECK failed: version 0 was accepted';
+    EXCEPTION WHEN check_violation THEN
+        NULL;
+    END;
+END;
+$$;
+
+-- 7B. Verify all three RLS policies define both USING and WITH CHECK.
+DO $$
+DECLARE
+    v_bad INTEGER;
+BEGIN
+    SELECT COUNT(*) INTO v_bad
+    FROM pg_policies
+    WHERE schemaname = 'offline_sync'
+      AND tablename IN (
+          'syncable_record_versions', 'sync_queue', 'sync_conflicts'
+      )
+      AND (qual IS NULL OR with_check IS NULL);
+
+    IF v_bad <> 0 THEN
+        RAISE EXCEPTION 'DB-018 RLS policies missing USING/WITH CHECK';
+    END IF;
+END;
+$$;
+
+
+-- --------------------------------------------------------------------------
 -- 8. Ensure PRV-05 is not introduced by DB-018
 -- --------------------------------------------------------------------------
 
