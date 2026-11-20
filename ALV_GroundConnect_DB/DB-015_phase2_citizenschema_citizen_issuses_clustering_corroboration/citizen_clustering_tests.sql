@@ -314,6 +314,39 @@ BEGIN
 END;
 $$;
 
+-- Cross-tenant WRITE must be rejected by the RLS WITH CHECK policy.
+SELECT set_config(
+    'app.organization_id',
+    (SELECT org_a::text FROM db015_ctx),
+    true
+);
+
+DO $$
+DECLARE
+    v_issue UUID;
+    v_user UUID;
+BEGIN
+    SELECT id INTO v_issue
+    FROM citizen_issues.canonical_issues
+    WHERE ref_number = 'DB015-A';
+
+    SELECT id INTO v_user
+    FROM identity_authentication_sessions.users
+    WHERE mobile_hash = encode(digest('9999000001','sha256'),'hex');
+
+    BEGIN
+        INSERT INTO citizen_issues.corroborations
+            (organization_id, canonical_issue_id, citizen_user_id)
+        VALUES
+            ((SELECT org_b FROM db015_ctx), v_issue, v_user);
+
+        RAISE EXCEPTION 'DB-015 RLS failed: cross-tenant INSERT was accepted';
+    EXCEPTION WHEN insufficient_privilege THEN
+        NULL; -- Expected RLS WITH CHECK rejection.
+    END;
+END;
+$$;
+
 -- Tenant isolation.
 SELECT set_config(
     'app.organization_id',
